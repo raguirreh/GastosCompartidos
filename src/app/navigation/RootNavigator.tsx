@@ -38,6 +38,11 @@ function AuthGate() {
 
     if (!session) {
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    } else {
+      // Sesión recién creada (login/signup en vivo, sin recarga de página):
+      // volvemos a Splash para que su lógica centralizada decida el siguiente
+      // paso (Onboarding, ProfileSetup o Main) una vez cargado el perfil.
+      navigation.reset({ index: 0, routes: [{ name: 'Splash' }] });
     }
   }, [session, isAuthLoading, navigation]);
 
