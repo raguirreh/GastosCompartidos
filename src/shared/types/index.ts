@@ -34,6 +34,7 @@ export interface Group {
   createdAt: number;
   createdBy: string;
   memberIds: string[];
+  inviteToken: string;
 }
 
 export interface GroupMember {

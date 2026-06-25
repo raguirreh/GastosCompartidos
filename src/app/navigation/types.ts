@@ -1,7 +1,10 @@
 export type RootStackParamList = {
   Splash: undefined;
   Onboarding: undefined;
+  Login: undefined;
+  SignUp: undefined;
   ProfileSetup: undefined;
+  Join: { token: string };
   Main: undefined;
 };
 

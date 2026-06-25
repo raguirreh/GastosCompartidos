@@ -1,6 +1,8 @@
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { insertExpense } from '../services/database/expensesRepository';
 import { enqueueOutboxItem } from '../services/database/outboxRepository';
+import { createExpense as createExpenseRemote, fetchExpensesForGroup } from '../services/supabase/api';
 import type { Expense, ExpenseCategory, Split, SplitMode } from '../shared/types';
 import { roundCurrency } from '../shared/utils/debtSimplification';
 import { generateUUID } from '../shared/utils/uuid';
@@ -24,6 +26,7 @@ interface CreateExpenseInput {
 interface ExpensesState {
   expensesByGroup: Record<string, Expense[]>;
   setExpensesForGroup: (groupId: string, expenses: Expense[]) => void;
+  fetchExpenses: (groupId: string) => Promise<void>;
   addExpense: (input: CreateExpenseInput) => Promise<Expense>;
   getExpensesForGroup: (groupId: string) => Expense[];
 }
@@ -100,6 +103,13 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       expensesByGroup: { ...state.expensesByGroup, [groupId]: expenses },
     })),
 
+  fetchExpenses: async (groupId) => {
+    const expenses = await fetchExpensesForGroup(groupId);
+    set((state) => ({
+      expensesByGroup: { ...state.expensesByGroup, [groupId]: expenses },
+    }));
+  },
+
   addExpense: async (input) => {
     const id = generateUUID();
     const splits = calculateSplits(
@@ -123,7 +133,7 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       splits,
       createdBy: input.createdBy,
       createdAt: Date.now(),
-      syncStatus: 'pending',
+      syncStatus: Platform.OS === 'web' ? 'synced' : 'pending',
     };
 
     set((state) => {
@@ -136,8 +146,12 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       };
     });
 
-    await insertExpense(expense);
-    await enqueueOutboxItem('create_expense', expense);
+    if (Platform.OS === 'web') {
+      await createExpenseRemote(expense);
+    } else {
+      await insertExpense(expense);
+      await enqueueOutboxItem('create_expense', expense);
+    }
 
     return expense;
   },

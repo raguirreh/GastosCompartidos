@@ -8,6 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Text, useTheme } from 'react-native-paper';
 import type { RootStackParamList } from '../../../app/navigation/types';
+import { useAuthStore } from '../../../store/authStore';
 import { useUserStore } from '../../../store';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Splash'>;
@@ -18,22 +19,48 @@ export function SplashScreen({ navigation }: Props) {
   const scale = useSharedValue(0.85);
   const hasCompletedOnboarding = useUserStore((s) => s.hasCompletedOnboarding);
   const currentUser = useUserStore((s) => s.currentUser);
+  const isAuthLoading = useAuthStore((s) => s.isAuthLoading);
 
   useEffect(() => {
     opacity.value = withTiming(1, { duration: 600 });
     scale.value = withTiming(1, { duration: 600 });
 
-    const timeout = setTimeout(() => {
-      if (currentUser) {
-        navigation.replace('Main');
-      } else if (hasCompletedOnboarding) {
+    const minDelay = new Promise<void>((resolve) => setTimeout(resolve, 1100));
+
+    let cancelled = false;
+    const waitForAuth = () =>
+      new Promise<void>((resolve) => {
+        if (!isAuthLoading) {
+          resolve();
+          return;
+        }
+        const interval = setInterval(() => {
+          if (!useAuthStore.getState().isAuthLoading) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 50);
+      });
+
+    Promise.all([minDelay, waitForAuth()]).then(() => {
+      if (cancelled) return;
+      if (!hasCompletedOnboarding) {
+        navigation.replace('Onboarding');
+        return;
+      }
+      const currentSession = useAuthStore.getState().session;
+      if (!currentSession) {
+        navigation.replace('Login');
+      } else if (!currentUser) {
         navigation.replace('ProfileSetup');
       } else {
-        navigation.replace('Onboarding');
+        navigation.replace('Main');
       }
-    }, 1100);
+    });
 
-    return () => clearTimeout(timeout);
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -1,6 +1,8 @@
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { insertGroup } from '../services/database/groupsRepository';
 import { enqueueOutboxItem } from '../services/database/outboxRepository';
+import { createGroup as createGroupRemote, fetchGroupsForUser } from '../services/supabase/api';
 import type { Group } from '../shared/types';
 import { generateUUID } from '../shared/utils/uuid';
 
@@ -15,6 +17,7 @@ interface GroupsState {
   groups: Group[];
   isLoading: boolean;
   setGroups: (groups: Group[]) => void;
+  fetchGroups: (userId: string) => Promise<void>;
   createGroup: (input: CreateGroupInput) => Promise<Group>;
   addMember: (groupId: string, userId: string) => void;
   getGroupById: (groupId: string) => Group | undefined;
@@ -26,7 +29,31 @@ export const useGroupsStore = create<GroupsState>((set, get) => ({
 
   setGroups: (groups) => set({ groups }),
 
+  fetchGroups: async (userId) => {
+    set({ isLoading: true });
+    try {
+      const groups = await fetchGroupsForUser(userId);
+      set({ groups });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
   createGroup: async (input) => {
+    if (Platform.OS === 'web') {
+      const newGroup = await createGroupRemote({
+        id: generateUUID(),
+        name: input.name,
+        emoji: input.emoji,
+        currency: input.currency,
+        createdAt: Date.now(),
+        createdBy: input.createdBy,
+      });
+
+      set((state) => ({ groups: [newGroup, ...state.groups] }));
+      return newGroup;
+    }
+
     const newGroup: Group = {
       id: generateUUID(),
       name: input.name,
@@ -35,11 +62,12 @@ export const useGroupsStore = create<GroupsState>((set, get) => ({
       createdAt: Date.now(),
       createdBy: input.createdBy,
       memberIds: [input.createdBy],
+      inviteToken: '',
     };
 
     set((state) => ({ groups: [newGroup, ...state.groups] }));
 
-    // Persistimos en SQLite (fuente de verdad) y encolamos para Firestore.
+    // Persistimos en SQLite (fuente de verdad) y encolamos para sync.
     await insertGroup(newGroup);
     await enqueueOutboxItem('create_group', newGroup);
 

@@ -47,7 +47,9 @@ export function OnboardingScreen({ navigation }: Props) {
 
   const handleNext = () => {
     if (pageIndex < slides.length - 1) {
-      listRef.current?.scrollToIndex({ index: pageIndex + 1 });
+      const nextIndex = pageIndex + 1;
+      listRef.current?.scrollToOffset({ offset: nextIndex * width, animated: true });
+      setPageIndex(nextIndex);
     } else {
       handleFinish();
     }

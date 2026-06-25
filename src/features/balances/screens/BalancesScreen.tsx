@@ -1,70 +1,123 @@
-import React, { useMemo, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, Dialog, Portal, Text, useTheme } from 'react-native-paper';
 import { Avatar } from '../../../shared/components/Avatar';
-import { buildWhatsAppPaymentRequestUrl } from '../../../shared/utils/invite';
+import { buildWhatsAppPaymentRequestUrl, buildWhatsAppWebPaymentRequestUrl } from '../../../shared/utils/invite';
 import { formatMoney, getCurrencySymbol } from '../../../shared/utils/format';
-import { getMockUserById, mockGroups } from '../../../shared/utils/mockData';
-import { useUserStore } from '../../../store';
+import { openWhatsApp } from '../../../shared/utils/share';
+import { useBalancesStore, useExpensesStore, useGroupsStore, useProfilesStore, useUserStore } from '../../../store';
+import type { Settlement } from '../../../shared/utils/debtSimplification';
 
-interface MockSettlementEntry {
+interface SettlementEntry {
   groupId: string;
   otherUserId: string;
   amount: number; // positivo: te deben, negativo: debes
 }
 
-const mockSettlements: MockSettlementEntry[] = [
-  { groupId: 'g1', otherUserId: 'u2', amount: 36 },
-  { groupId: 'g1', otherUserId: 'u3', amount: 25 },
-  { groupId: 'g2', otherUserId: 'u2', amount: -100 },
-  { groupId: 'g3', otherUserId: 'u4', amount: 18 },
-];
-
 export function BalancesScreen() {
   const theme = useTheme();
   const currentUser = useUserStore((s) => s.currentUser);
-  const [dialogEntry, setDialogEntry] = useState<MockSettlementEntry | null>(null);
+  const groups = useGroupsStore((s) => s.groups);
+  const fetchGroups = useGroupsStore((s) => s.fetchGroups);
+  const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
+  const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
+  const recalculateForGroup = useBalancesStore((s) => s.recalculateForGroup);
+  const settlementsByGroup = useBalancesStore((s) => s.settlementsByGroup);
+  const profiles = useProfilesStore((s) => s.profiles);
+  const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
+
+  const [dialogEntry, setDialogEntry] = useState<SettlementEntry | null>(null);
   const [dialogAction, setDialogAction] = useState<'request' | 'register' | null>(null);
 
-  const owedToMe = useMemo(() => mockSettlements.filter((s) => s.amount > 0), []);
-  const owedByMe = useMemo(() => mockSettlements.filter((s) => s.amount < 0), []);
-  const netTotal = useMemo(
-    () => mockSettlements.reduce((sum, s) => sum + s.amount, 0),
-    []
-  );
+  useEffect(() => {
+    if (currentUser) {
+      fetchGroups(currentUser.uid).catch(() => {
+        // Si falla, la lista de saldos queda vacía.
+      });
+    }
+  }, [currentUser, fetchGroups]);
+
+  useEffect(() => {
+    groups.forEach((group) => {
+      fetchExpenses(group.id).catch(() => {
+        // Ignoramos errores individuales por grupo.
+      });
+    });
+    const allMemberIds = groups.flatMap((g) => g.memberIds);
+    if (allMemberIds.length > 0) {
+      ensureProfiles(allMemberIds).catch(() => {
+        // Si falla, los avatares simplemente no se resuelven aún.
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups]);
+
+  useEffect(() => {
+    for (const group of groups) {
+      const expenses = expensesByGroup[group.id] ?? [];
+      recalculateForGroup(group.id, expenses);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, expensesByGroup]);
+
+  const settlements: SettlementEntry[] = useMemo(() => {
+    if (!currentUser) return [];
+    const entries: SettlementEntry[] = [];
+    for (const group of groups) {
+      const groupSettlements: Settlement[] = settlementsByGroup[group.id] ?? [];
+      for (const settlement of groupSettlements) {
+        if (settlement.toUserId === currentUser.uid) {
+          entries.push({ groupId: group.id, otherUserId: settlement.fromUserId, amount: settlement.amount });
+        } else if (settlement.fromUserId === currentUser.uid) {
+          entries.push({ groupId: group.id, otherUserId: settlement.toUserId, amount: -settlement.amount });
+        }
+      }
+    }
+    return entries;
+  }, [groups, settlementsByGroup, currentUser]);
+
+  const owedToMe = useMemo(() => settlements.filter((s) => s.amount > 0), [settlements]);
+  const owedByMe = useMemo(() => settlements.filter((s) => s.amount < 0), [settlements]);
+  const netTotal = useMemo(() => settlements.reduce((sum, s) => sum + s.amount, 0), [settlements]);
 
   const closeDialog = () => {
     setDialogEntry(null);
     setDialogAction(null);
   };
 
-  const handleRequestPayment = (entry: MockSettlementEntry) => {
-    const debtor = getMockUserById(entry.otherUserId);
-    const group = mockGroups.find((g) => g.id === entry.groupId);
+  const handleRequestPayment = (entry: SettlementEntry) => {
+    const debtor = profiles[entry.otherUserId];
+    const group = groups.find((g) => g.id === entry.groupId);
     if (!debtor || !group) return;
 
-    const url = buildWhatsAppPaymentRequestUrl(
+    const nativeUrl = buildWhatsAppPaymentRequestUrl(
       debtor.name,
       Math.abs(entry.amount),
       getCurrencySymbol(group.currency),
       group.name
     );
-    Linking.openURL(url).catch(() => {
-      // Si WhatsApp no está instalado, no hacemos nada más: esto es un mock honesto.
+    const webUrl = buildWhatsAppWebPaymentRequestUrl(
+      debtor.name,
+      Math.abs(entry.amount),
+      getCurrencySymbol(group.currency),
+      group.name
+    );
+    openWhatsApp(nativeUrl, webUrl).catch(() => {
+      // Si WhatsApp no está instalado, no hacemos nada más.
     });
     closeDialog();
   };
 
-  const handleRegisterPayment = (entry: MockSettlementEntry) => {
-    // Mock: en una implementación completa esto crearía una `Transaction`
-    // con status 'pending' y la encolaría en el outbox para confirmación.
+  const handleRegisterPayment = () => {
+    // TODO: en una implementación completa esto crearía una `Transaction`
+    // con status 'pending' y la encolaría para confirmación.
     closeDialog();
   };
 
-  const renderEntry = (entry: MockSettlementEntry, type: 'owed' | 'owe') => {
-    const other = getMockUserById(entry.otherUserId);
-    const group = mockGroups.find((g) => g.id === entry.groupId);
+  const renderEntry = (entry: SettlementEntry, type: 'owed' | 'owe') => {
+    const other = profiles[entry.otherUserId];
+    const group = groups.find((g) => g.id === entry.groupId);
     if (!other || !group) return null;
 
     return (
@@ -81,7 +134,8 @@ export function BalancesScreen() {
             variant="titleSmall"
             style={{ color: type === 'owed' ? theme.colors.tertiary : theme.colors.error }}
           >
-            {formatMoney(Math.abs(entry.amount), group.currency)}
+            <Text aria-hidden importantForAccessibility="no">{type === 'owed' ? '↑ ' : '↓ '}</Text>
+            {formatMoney(Math.abs(entry.amount), group.currency)} {type === 'owed' ? '(a tu favor)' : '(debes)'}
           </Text>
         </Card.Content>
         <Card.Actions>
@@ -113,8 +167,8 @@ export function BalancesScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text variant="headlineSmall" style={styles.title}>
+      <ScrollView contentContainerStyle={styles.scrollContent} role="main">
+        <Text variant="headlineSmall" style={styles.title} accessibilityRole="header" aria-level={1}>
           Saldos
         </Text>
 
@@ -130,18 +184,19 @@ export function BalancesScreen() {
                 fontWeight: '700',
               }}
             >
-              {formatMoney(netTotal, 'PEN')}
+              <Text aria-hidden importantForAccessibility="no">{netTotal >= 0 ? '↑ ' : '↓ '}</Text>
+              {formatMoney(netTotal, 'PEN')} {netTotal >= 0 ? '(a tu favor)' : '(debes)'}
             </Text>
           </Card.Content>
         </Card>
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>
+        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
           Te deben
         </Text>
         {owedToMe.length === 0 && <Text style={styles.emptyText}>Nadie te debe dinero ahora.</Text>}
         {owedToMe.map((entry) => renderEntry(entry, 'owed'))}
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>
+        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
           Debes
         </Text>
         {owedByMe.length === 0 && <Text style={styles.emptyText}>No le debes dinero a nadie ahora.</Text>}
@@ -156,8 +211,8 @@ export function BalancesScreen() {
           <Dialog.Content>
             <Text variant="bodyMedium">
               {dialogAction === 'request'
-                ? `Se abrirá WhatsApp para recordarle a ${getMockUserById(dialogEntry?.otherUserId ?? '')?.name} que te debe dinero.`
-                : `Esto marcará la deuda con ${getMockUserById(dialogEntry?.otherUserId ?? '')?.name} como pagada (demo).`}
+                ? `Se abrirá WhatsApp para recordarle a ${profiles[dialogEntry?.otherUserId ?? '']?.name} que te debe dinero.`
+                : `Esto marcará la deuda con ${profiles[dialogEntry?.otherUserId ?? '']?.name} como pagada.`}
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
@@ -168,7 +223,7 @@ export function BalancesScreen() {
                 if (dialogAction === 'request') {
                   handleRequestPayment(dialogEntry);
                 } else {
-                  handleRegisterPayment(dialogEntry);
+                  handleRegisterPayment();
                 }
               }}
             >

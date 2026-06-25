@@ -1,46 +1,42 @@
 import * as Clipboard from 'expo-clipboard';
-import * as Sharing from 'expo-sharing';
 import React, { useMemo, useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { Button, Modal, Portal, Text, useTheme } from 'react-native-paper';
-import { buildWhatsAppInviteUrl, generateGroupInvite } from '../utils/invite';
+import { buildGroupInviteLink, buildWhatsAppInviteUrl, buildWhatsAppWebInviteUrl } from '../utils/invite';
+import { openWhatsApp, shareOrCopy } from '../utils/share';
 
 interface InviteModalProps {
   visible: boolean;
   onDismiss: () => void;
-  groupId: string;
+  inviteToken: string;
   groupName: string;
 }
 
 /** Modal de invitación a un grupo: link, copiar, compartir por WhatsApp, compartir nativo y QR. */
-export function InviteModal({ visible, onDismiss, groupId, groupName }: InviteModalProps) {
+export function InviteModal({ visible, onDismiss, inviteToken, groupName }: InviteModalProps) {
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
 
-  const invite = useMemo(() => generateGroupInvite(groupId), [groupId]);
+  const link = useMemo(() => buildGroupInviteLink(inviteToken), [inviteToken]);
 
   const handleCopy = async () => {
-    await Clipboard.setStringAsync(invite.link);
+    await Clipboard.setStringAsync(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleWhatsApp = async () => {
-    const url = buildWhatsAppInviteUrl(groupName, invite.link);
-    const canOpen = await Linking.canOpenURL(url);
-    if (canOpen) {
-      await Linking.openURL(url);
-    } else {
-      await Sharing.shareAsync(invite.link);
+    const nativeUrl = buildWhatsAppInviteUrl(groupName, link);
+    const webUrl = buildWhatsAppWebInviteUrl(groupName, link);
+    const opened = await openWhatsApp(nativeUrl, webUrl);
+    if (!opened) {
+      await shareOrCopy(link);
     }
   };
 
   const handleNativeShare = async () => {
-    const available = await Sharing.isAvailableAsync();
-    if (available) {
-      await Sharing.shareAsync(invite.link);
-    }
+    await shareOrCopy(link);
   };
 
   return (
@@ -55,11 +51,11 @@ export function InviteModal({ visible, onDismiss, groupId, groupName }: InviteMo
         </Text>
 
         <View style={styles.qrWrapper}>
-          <QRCode value={invite.link} size={180} color={theme.colors.onSurface} backgroundColor={theme.colors.surface} />
+          <QRCode value={link} size={180} color={theme.colors.onSurface} backgroundColor={theme.colors.surface} />
         </View>
 
         <Text variant="bodyMedium" style={styles.link} numberOfLines={2}>
-          {invite.link}
+          {link}
         </Text>
 
         <Button mode="outlined" onPress={handleCopy} style={styles.button} icon="content-copy">

@@ -1,22 +1,11 @@
-import { generateUUID } from './uuid';
-
-const APP_BASE_URL = 'https://splitapp.com';
-
-export interface GroupInvite {
-  token: string;
-  link: string;
-}
+const APP_BASE_URL = 'https://gastoscompartidos.raguirre-contact.workers.dev';
 
 /**
- * Genera un token único y el link de invitación asociado a un grupo.
- * El token combina un UUID con el timestamp actual para reducir aún más
- * la probabilidad de colisión y facilitar trazabilidad/expiración futura.
+ * Arma el link de invitación a un grupo a partir de su `inviteToken` real
+ * (columna `invite_token` en la tabla `groups`, generada por Postgres).
  */
-export function generateGroupInvite(groupId: string): GroupInvite {
-  const groupToken = `${generateUUID()}-${Date.now()}`;
-  const inviteLink = `${APP_BASE_URL}/join/${groupToken}`;
-
-  return { token: groupToken, link: inviteLink };
+export function buildGroupInviteLink(inviteToken: string): string {
+  return `${APP_BASE_URL}/join/${inviteToken}`;
 }
 
 /**
@@ -34,6 +23,16 @@ export function buildInviteMessage(groupName: string, inviteLink: string): strin
 export function buildWhatsAppInviteUrl(groupName: string, inviteLink: string): string {
   const message = buildInviteMessage(groupName, inviteLink);
   return `whatsapp://send?text=${encodeURIComponent(message)}`;
+}
+
+/**
+ * Igual que `buildWhatsAppInviteUrl` pero usando el esquema `https://wa.me`,
+ * que sí abre WhatsApp Web/desktop en navegador (el esquema `whatsapp://`
+ * no es resoluble desde la web).
+ */
+export function buildWhatsAppWebInviteUrl(groupName: string, inviteLink: string): string {
+  const message = buildInviteMessage(groupName, inviteLink);
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 
 /**
@@ -64,4 +63,16 @@ export function buildWhatsAppPaymentRequestUrl(
 ): string {
   const message = buildPaymentRequestMessage(debtorName, amount, currencySymbol, groupName, link);
   return `whatsapp://send?text=${encodeURIComponent(message)}`;
+}
+
+/** Igual que `buildWhatsAppPaymentRequestUrl` pero usando `https://wa.me` para web. */
+export function buildWhatsAppWebPaymentRequestUrl(
+  debtorName: string,
+  amount: number,
+  currencySymbol: string,
+  groupName: string,
+  link?: string
+): string {
+  const message = buildPaymentRequestMessage(debtorName, amount, currencySymbol, groupName, link);
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }

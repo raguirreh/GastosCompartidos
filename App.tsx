@@ -1,32 +1,93 @@
-import { NavigationContainer } from '@react-navigation/native';
+import './src/styles/global';
+import { NavigationContainer, type LinkingOptions } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { RootNavigator } from './src/app/navigation/RootNavigator';
+import { AuthGate, RootNavigator } from './src/app/navigation/RootNavigator';
+import type { RootStackParamList } from './src/app/navigation/types';
 import { getTheme } from './src/app/theme/theme';
 import { getDatabase } from './src/services/database/client';
-import { signInAnonymouslyIfNeeded } from './src/services/firebase/firebaseConfig';
+import { fetchProfile } from './src/services/supabase/api';
+import { getSupabase } from './src/services/supabase/client';
 import { processOutbox } from './src/services/sync/syncService';
 import { useNetworkStatus } from './src/shared/hooks/useNetworkStatus';
+import { useAuthStore } from './src/store/authStore';
 import { useUserStore } from './src/store';
+
+const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: ['https://gastoscompartidos.raguirre-contact.workers.dev'],
+  config: {
+    screens: {
+      Join: 'join/:token',
+    },
+  },
+};
 
 export default function App() {
   const themePreference = useUserStore((s) => s.themePreference);
   const theme = getTheme(themePreference);
   const { isOnline } = useNetworkStatus();
+  const setSession = useAuthStore((s) => s.setSession);
+  const setAuthLoading = useAuthStore((s) => s.setAuthLoading);
+  const setCurrentUser = useUserStore((s) => s.setCurrentUser);
+  const clearUser = useUserStore((s) => s.clearUser);
 
-  // Inicialización de la base de datos local (fuente de verdad offline-first)
-  // y, si hay conectividad y Firebase está configurado, autenticación anónima.
+  // Inicialización de la base de datos local (fuente de verdad offline-first
+  // en mobile, no disponible en web) y suscripción al estado de auth real de
+  // Supabase (signup/login con cuenta real, sin sesiones anónimas).
   useEffect(() => {
-    getDatabase().catch((error) => {
-      console.warn('Error inicializando la base de datos local', error);
+    if (Platform.OS !== 'web') {
+      getDatabase().catch((error) => {
+        console.warn('Error inicializando la base de datos local', error);
+      });
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+
+    supabase.auth
+      .getSession()
+      .then(async ({ data }) => {
+        setSession(data.session);
+        if (data.session) {
+          try {
+            const profile = await fetchProfile(data.session.user.id);
+            if (profile) setCurrentUser(profile);
+          } catch {
+            // Si falla la carga del perfil, la pantalla de ProfileSetup se
+            // encargará de pedirlo de nuevo.
+          }
+        }
+      })
+      .finally(() => {
+        setAuthLoading(false);
+      });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        fetchProfile(session.user.id)
+          .then((profile) => {
+            if (profile) setCurrentUser(profile);
+          })
+          .catch(() => {
+            // El perfil podría no existir todavía (cuenta recién creada).
+          });
+      } else {
+        clearUser();
+      }
     });
-    signInAnonymouslyIfNeeded().catch(() => {
-      // Firebase no configurado o sin conexión: la app sigue funcionando
-      // 100% offline contra SQLite, que es la fuente de verdad.
-    });
+
+    return () => {
+      subscription.subscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Cuando recuperamos conectividad, intentamos drenar el outbox pendiente.
@@ -43,7 +104,8 @@ export default function App() {
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
           <StatusBar style={themePreference === 'dark' ? 'light' : 'dark'} />
-          <NavigationContainer>
+          <NavigationContainer linking={linking}>
+            <AuthGate />
             <RootNavigator />
           </NavigationContainer>
         </PaperProvider>

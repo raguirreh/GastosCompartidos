@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, FAB, Text, useTheme } from 'react-native-paper';
@@ -9,9 +9,9 @@ import type { MainTabParamList } from '../../../app/navigation/types';
 import type { GroupsStackParamList } from '../../../app/navigation/types';
 import { Avatar } from '../../../shared/components/Avatar';
 import { OnlineIndicator } from '../../../shared/components/OnlineIndicator';
+import { computeGroupSettlements } from '../../../shared/utils/debtSimplification';
 import { formatMoney, formatRelativeDate, getCurrencySymbol } from '../../../shared/utils/format';
-import { getMockUserById, mockExpenses, mockGroups } from '../../../shared/utils/mockData';
-import { useUserStore } from '../../../store';
+import { useExpensesStore, useGroupsStore, useProfilesStore, useUserStore } from '../../../store';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Home'>,
@@ -21,25 +21,72 @@ type Props = CompositeScreenProps<
 export function HomeScreen({ navigation }: Props) {
   const theme = useTheme();
   const currentUser = useUserStore((s) => s.currentUser);
+  const groups = useGroupsStore((s) => s.groups);
+  const fetchGroups = useGroupsStore((s) => s.fetchGroups);
+  const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
+  const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
+  const profiles = useProfilesStore((s) => s.profiles);
+  const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
 
-  // Saldo global mock: suma simple a partir de los gastos de ejemplo.
+  useEffect(() => {
+    if (currentUser) {
+      fetchGroups(currentUser.uid).catch(() => {
+        // Si falla, la pantalla simplemente queda vacía.
+      });
+    }
+  }, [currentUser, fetchGroups]);
+
+  useEffect(() => {
+    groups.forEach((group) => {
+      fetchExpenses(group.id).catch(() => {
+        // Ignoramos errores individuales por grupo.
+      });
+    });
+    const allMemberIds = groups.flatMap((g) => g.memberIds);
+    if (allMemberIds.length > 0) {
+      ensureProfiles(allMemberIds).catch(() => {
+        // Si falla, los avatares simplemente no se resuelven aún.
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups]);
+
+  const allExpenses = useMemo(() => Object.values(expensesByGroup).flat(), [expensesByGroup]);
+
   const { owed, owe, net } = useMemo(() => {
-    const totalOwed = 145;
-    const totalOwe = 60;
+    if (!currentUser) return { owed: 0, owe: 0, net: 0 };
+    let totalOwed = 0;
+    let totalOwe = 0;
+    for (const group of groups) {
+      const expenses = expensesByGroup[group.id] ?? [];
+      const settlements = computeGroupSettlements(
+        expenses.map((expense) => ({
+          paidBy: expense.paidBy,
+          amount: expense.amount,
+          splits: expense.splits.map((s) => ({ userId: s.userId, amount: s.amount })),
+        }))
+      );
+      for (const settlement of settlements) {
+        if (settlement.toUserId === currentUser.uid) totalOwed += settlement.amount;
+        if (settlement.fromUserId === currentUser.uid) totalOwe += settlement.amount;
+      }
+    }
     return { owed: totalOwed, owe: totalOwe, net: totalOwed - totalOwe };
-  }, []);
+  }, [groups, expensesByGroup, currentUser]);
 
   const recentActivity = useMemo(
-    () => [...mockExpenses].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4),
-    []
+    () => [...allExpenses].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4),
+    [allExpenses]
   );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
+      <ScrollView contentContainerStyle={styles.scrollContent} role="main">
+        <View style={styles.header} role="banner">
           <View>
-            <Text variant="titleMedium">Hola, {currentUser?.name ?? 'Usuario'} {currentUser?.emoji}</Text>
+            <Text variant="titleMedium" accessibilityRole="header" aria-level={1}>
+              Hola, {currentUser?.name ?? 'Usuario'} {currentUser?.emoji}
+            </Text>
             <Text variant="bodySmall" style={styles.headerSubtitle}>
               Esto es lo que pasa con tu dinero
             </Text>
@@ -56,54 +103,66 @@ export function HomeScreen({ navigation }: Props) {
               variant="displaySmall"
               style={{ color: net >= 0 ? theme.colors.tertiary : theme.colors.error, fontWeight: '700' }}
             >
-              {formatMoney(net, 'PEN')}
+              <Text aria-hidden importantForAccessibility="no">{net >= 0 ? '↑ ' : '↓ '}</Text>
+              {formatMoney(net, 'PEN')} {net >= 0 ? '(a tu favor)' : '(debes)'}
             </Text>
             <View style={styles.balanceRow}>
               <View style={styles.balanceItem}>
                 <Text variant="bodySmall" style={styles.balanceItemLabel}>Te deben</Text>
                 <Text variant="titleMedium" style={{ color: theme.colors.tertiary }}>
-                  {formatMoney(owed, 'PEN')}
+                  <Text aria-hidden importantForAccessibility="no">↑ </Text>
+                  {formatMoney(owed, 'PEN')} (a tu favor)
                 </Text>
               </View>
               <View style={styles.balanceItem}>
                 <Text variant="bodySmall" style={styles.balanceItemLabel}>Debes</Text>
                 <Text variant="titleMedium" style={{ color: theme.colors.error }}>
-                  {formatMoney(owe, 'PEN')}
+                  <Text aria-hidden importantForAccessibility="no">↓ </Text>
+                  {formatMoney(owe, 'PEN')} (debes)
                 </Text>
               </View>
             </View>
           </Card.Content>
         </Card>
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>
+        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
           Tus grupos
         </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.groupsRow}>
-          {mockGroups.map((group) => (
-            <Card
-              key={group.id}
-              style={styles.groupCard}
-              onPress={() => navigation.navigate('Groups', { screen: 'GroupDetail', params: { groupId: group.id } } as never)}
-            >
-              <Card.Content>
-                <Text style={styles.groupEmoji}>{group.emoji}</Text>
-                <Text variant="titleSmall" numberOfLines={1}>
-                  {group.name}
-                </Text>
-                <Text variant="bodySmall" style={styles.groupMembers}>
-                  {group.memberIds.length} miembros
-                </Text>
-              </Card.Content>
-            </Card>
-          ))}
-        </ScrollView>
+        {groups.length === 0 ? (
+          <Text style={styles.emptyText}>Todavía no tienes grupos. Crea uno para empezar.</Text>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.groupsRow}>
+            {groups.map((group) => (
+              <Card
+                key={group.id}
+                style={styles.groupCard}
+                onPress={() => navigation.navigate('Groups', { screen: 'GroupDetail', params: { groupId: group.id } } as never)}
+                accessibilityRole="button"
+                accessibilityLabel={`${group.name}, ${group.memberIds.length} miembros`}
+              >
+                <Card.Content>
+                  <Text style={styles.groupEmoji} aria-hidden importantForAccessibility="no">{group.emoji}</Text>
+                  <Text variant="titleSmall" numberOfLines={1}>
+                    {group.name}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.groupMembers}>
+                    {group.memberIds.length} miembros
+                  </Text>
+                </Card.Content>
+              </Card>
+            ))}
+          </ScrollView>
+        )}
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>
+        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
           Actividad reciente
         </Text>
+        {recentActivity.length === 0 && (
+          <Text style={styles.emptyText}>Todavía no hay actividad.</Text>
+        )}
         {recentActivity.map((expense) => {
-          const payer = getMockUserById(expense.paidBy);
-          const group = mockGroups.find((g) => g.id === expense.groupId);
+          const payer = profiles[expense.paidBy];
+          const group = groups.find((g) => g.id === expense.groupId);
           return (
             <Card key={expense.id} style={styles.activityCard} mode="outlined">
               <Card.Content style={styles.activityContent}>
@@ -123,15 +182,17 @@ export function HomeScreen({ navigation }: Props) {
         })}
       </ScrollView>
 
-      <FAB
-        icon="plus"
-        label="Gasto"
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        color="#FFFFFF"
-        onPress={() =>
-          navigation.navigate('Groups', { screen: 'AddExpense', params: { groupId: mockGroups[0].id } } as never)
-        }
-      />
+      {groups.length > 0 && (
+        <FAB
+          icon="plus"
+          label="Gasto"
+          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+          color="#FFFFFF"
+          onPress={() =>
+            navigation.navigate('Groups', { screen: 'AddExpense', params: { groupId: groups[0].id } } as never)
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -175,6 +236,10 @@ const styles = StyleSheet.create({
   sectionTitle: {
     marginBottom: 12,
     fontWeight: '700',
+  },
+  emptyText: {
+    opacity: 0.6,
+    marginBottom: 16,
   },
   groupsRow: {
     marginBottom: 24,

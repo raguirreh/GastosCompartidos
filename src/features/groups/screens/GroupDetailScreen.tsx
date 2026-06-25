@@ -1,14 +1,15 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, FAB, IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 import type { GroupsStackParamList } from '../../../app/navigation/types';
 import { Avatar } from '../../../shared/components/Avatar';
 import { InviteModal } from '../../../shared/components/InviteModal';
+import { mockCategories } from '../../../shared/constants/categories';
 import { computeGroupSettlements } from '../../../shared/utils/debtSimplification';
 import { formatDate, formatMoney } from '../../../shared/utils/format';
-import { getMockUserById, mockCategories, mockExpenses, mockGroups } from '../../../shared/utils/mockData';
+import { useExpensesStore, useGroupsStore, useProfilesStore } from '../../../store';
 
 type Props = NativeStackScreenProps<GroupsStackParamList, 'GroupDetail'>;
 
@@ -20,11 +21,29 @@ export function GroupDetailScreen({ route, navigation }: Props) {
   const [tab, setTab] = useState<TabKey>('expenses');
   const [inviteVisible, setInviteVisible] = useState(false);
 
-  const group = mockGroups.find((g) => g.id === groupId) ?? mockGroups[0];
-  const groupExpenses = useMemo(
-    () => mockExpenses.filter((e) => e.groupId === groupId),
-    [groupId]
-  );
+  const getGroupById = useGroupsStore((s) => s.getGroupById);
+  const group = getGroupById(groupId);
+  const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
+  const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
+  const profiles = useProfilesStore((s) => s.profiles);
+  const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
+
+  useEffect(() => {
+    fetchExpenses(groupId).catch(() => {
+      // Si falla, la lista de gastos queda vacía.
+    });
+  }, [groupId, fetchExpenses]);
+
+  useEffect(() => {
+    if (group) {
+      ensureProfiles(group.memberIds).catch(() => {
+        // Si falla, los avatares simplemente no se resuelven aún.
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group]);
+
+  const groupExpenses = useMemo(() => expensesByGroup[groupId] ?? [], [expensesByGroup, groupId]);
 
   const settlements = useMemo(
     () =>
@@ -38,16 +57,24 @@ export function GroupDetailScreen({ route, navigation }: Props) {
     [groupExpenses]
   );
 
+  if (!group) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
+        <Text style={styles.emptyText}>No pudimos encontrar este grupo.</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+      <View style={styles.header} role="banner">
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} accessibilityLabel="Volver" />
         <View style={styles.headerTitleWrapper}>
-          <Text variant="titleLarge" numberOfLines={1}>
+          <Text variant="titleLarge" numberOfLines={1} accessibilityRole="header" aria-level={1} accessibilityLabel={group.name}>
             {group.emoji} {group.name}
           </Text>
         </View>
-        <IconButton icon="account-plus" onPress={() => setInviteVisible(true)} />
+        <IconButton icon="account-plus" onPress={() => setInviteVisible(true)} accessibilityLabel="Invitar miembro" />
       </View>
 
       <SegmentedButtons
@@ -62,12 +89,12 @@ export function GroupDetailScreen({ route, navigation }: Props) {
       />
 
       {tab === 'expenses' && (
-        <ScrollView contentContainerStyle={styles.tabContent}>
+        <ScrollView contentContainerStyle={styles.tabContent} role="main">
           {groupExpenses.length === 0 && (
             <Text style={styles.emptyText}>Todavía no hay gastos en este grupo.</Text>
           )}
           {groupExpenses.map((expense) => {
-            const payer = getMockUserById(expense.paidBy);
+            const payer = profiles[expense.paidBy];
             const category = mockCategories.find((c) => c.value === expense.category);
             return (
               <Card key={expense.id} style={styles.expenseCard} mode="outlined">
@@ -90,16 +117,16 @@ export function GroupDetailScreen({ route, navigation }: Props) {
       )}
 
       {tab === 'balances' && (
-        <ScrollView contentContainerStyle={styles.tabContent}>
-          <Text variant="labelLarge" style={styles.sectionLabel}>
+        <ScrollView contentContainerStyle={styles.tabContent} role="main">
+          <Text variant="labelLarge" style={styles.sectionLabel} accessibilityRole="header" aria-level={2}>
             Pagos sugeridos (mínimo de transacciones)
           </Text>
           {settlements.length === 0 && (
             <Text style={styles.emptyText}>Este grupo está saldado. ¡Buen trabajo!</Text>
           )}
           {settlements.map((settlement, index) => {
-            const from = getMockUserById(settlement.fromUserId);
-            const to = getMockUserById(settlement.toUserId);
+            const from = profiles[settlement.fromUserId];
+            const to = profiles[settlement.toUserId];
             return (
               <Card key={index} style={styles.settlementCard} mode="outlined">
                 <Card.Content style={styles.settlementRow}>
@@ -112,7 +139,8 @@ export function GroupDetailScreen({ route, navigation }: Props) {
                 </Card.Content>
                 <Card.Content>
                   <Text variant="titleMedium" style={{ color: theme.colors.error }}>
-                    {formatMoney(settlement.amount, group.currency)}
+                    <Text aria-hidden importantForAccessibility="no">↓ </Text>
+                    {formatMoney(settlement.amount, group.currency)} (deuda pendiente)
                   </Text>
                 </Card.Content>
               </Card>
@@ -122,9 +150,9 @@ export function GroupDetailScreen({ route, navigation }: Props) {
       )}
 
       {tab === 'members' && (
-        <ScrollView contentContainerStyle={styles.tabContent}>
+        <ScrollView contentContainerStyle={styles.tabContent} role="main">
           {group.memberIds.map((memberId) => {
-            const member = getMockUserById(memberId);
+            const member = profiles[memberId];
             if (!member) return null;
             return (
               <Card key={memberId} style={styles.memberCard} mode="outlined">
@@ -154,7 +182,7 @@ export function GroupDetailScreen({ route, navigation }: Props) {
       <InviteModal
         visible={inviteVisible}
         onDismiss={() => setInviteVisible(false)}
-        groupId={groupId}
+        inviteToken={group.inviteToken}
         groupName={group.name}
       />
     </SafeAreaView>

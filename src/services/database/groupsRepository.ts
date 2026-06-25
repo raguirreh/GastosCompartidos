@@ -15,6 +15,10 @@ function rowToGroup(row: GroupRow): Group {
   return {
     ...row,
     memberIds: JSON.parse(row.memberIds) as string[],
+    // El esquema SQLite local no persiste invite_token (los enlaces de
+    // invitación solo se generan vía Supabase); en native el link de
+    // invitación requiere conexión.
+    inviteToken: '',
   };
 }
 
