@@ -1,14 +1,14 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Chip, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import type { GroupsStackParamList } from '../../../app/navigation/types';
 import { Avatar } from '../../../shared/components/Avatar';
 import type { ExpenseCategory, SplitMode } from '../../../shared/types';
+import { mockCategories } from '../../../shared/constants/categories';
 import { formatDate } from '../../../shared/utils/format';
-import { getMockUserById, mockCategories, mockGroups } from '../../../shared/utils/mockData';
-import { useExpensesStore, useUserStore } from '../../../store';
+import { useExpensesStore, useGroupsStore, useProfilesStore, useUserStore } from '../../../store';
 
 type Props = NativeStackScreenProps<GroupsStackParamList, 'AddExpense'>;
 
@@ -17,11 +17,27 @@ export function AddExpenseScreen({ route, navigation }: Props) {
   const { groupId } = route.params;
   const currentUser = useUserStore((s) => s.currentUser);
   const addExpense = useExpensesStore((s) => s.addExpense);
+  const getGroupById = useGroupsStore((s) => s.getGroupById);
+  const profiles = useProfilesStore((s) => s.profiles);
+  const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
 
-  const group = mockGroups.find((g) => g.id === groupId) ?? mockGroups[0];
+  const group = getGroupById(groupId);
+
+  useEffect(() => {
+    if (group) {
+      ensureProfiles(group.memberIds).catch(() => {
+        // Si falla, los miembros simplemente no se resuelven aún.
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group]);
+
   const members = useMemo(
-    () => group.memberIds.map((id) => getMockUserById(id)).filter((u): u is NonNullable<typeof u> => Boolean(u)),
-    [group]
+    () =>
+      (group?.memberIds ?? [])
+        .map((id) => profiles[id])
+        .filter((u): u is NonNullable<typeof u> => Boolean(u)),
+    [group, profiles]
   );
 
   const [description, setDescription] = useState('');
@@ -31,8 +47,12 @@ export function AddExpenseScreen({ route, navigation }: Props) {
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
   const [category, setCategory] = useState<ExpenseCategory>('food');
   const [notes, setNotes] = useState('');
-  const [participantIds, setParticipantIds] = useState<string[]>(group.memberIds);
+  const [participantIds, setParticipantIds] = useState<string[]>(group?.memberIds ?? []);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (group) setParticipantIds(group.memberIds);
+  }, [group]);
 
   const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
 
@@ -44,7 +64,7 @@ export function AddExpenseScreen({ route, navigation }: Props) {
 
   const handleSubmit = async () => {
     if (!description.trim() || numericAmount <= 0 || !paidBy || participantIds.length === 0) return;
-    if (!currentUser) return;
+    if (!currentUser || !group) return;
 
     setIsSubmitting(true);
     try {
@@ -67,8 +87,16 @@ export function AddExpenseScreen({ route, navigation }: Props) {
     }
   };
 
-  const payer = getMockUserById(paidBy);
-  const canSubmit = description.trim().length > 0 && numericAmount > 0 && participantIds.length > 0;
+  const payer = profiles[paidBy];
+  const canSubmit = description.trim().length > 0 && numericAmount > 0 && participantIds.length > 0 && Boolean(group);
+
+  if (!group) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+        <Text style={styles.helperText}>No pudimos encontrar este grupo.</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>

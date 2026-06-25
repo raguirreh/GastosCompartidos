@@ -1,23 +1,41 @@
 import { getSupabase } from './client';
 
 /**
- * Inicia sesión anónima vía Supabase Auth. Equivalente al Anonymous Auth de
- * Firebase: el usuario obtiene un UID real (auth.uid()) sin registrarse,
- * y ese UID es el que validan las políticas RLS (ver migración inicial).
+ * Autenticación real de Supabase: registro y login con email/contraseña.
+ * Ya no se usa autenticación anónima — cada usuario debe crear una cuenta
+ * real, lo que permite validar identidad en invitaciones a grupos.
  */
-export async function signInAnonymouslyIfNeeded(): Promise<string | null> {
+
+export async function signUp(
+  email: string,
+  password: string
+): Promise<{ userId: string | null; needsEmailConfirmation: boolean }> {
+  const supabase = getSupabase();
+  if (!supabase) return { userId: null, needsEmailConfirmation: false };
+
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+
+  const needsEmailConfirmation = !data.session;
+  return { userId: data.user?.id ?? null, needsEmailConfirmation };
+}
+
+export async function signInWithPassword(email: string, password: string): Promise<string | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (sessionData.session?.user) {
-    return sessionData.session.user.id;
-  }
-
-  const { data, error } = await supabase.auth.signInAnonymously();
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
 
   return data.user?.id ?? null;
+}
+
+export async function signOut(): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
 }
 
 export async function getCurrentUserId(): Promise<string | null> {

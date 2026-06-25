@@ -44,6 +44,15 @@ export async function fetchProfile(userId: string): Promise<User | null> {
   return data ? profileRowToUser(data as ProfileRow) : null;
 }
 
+export async function fetchProfilesByIds(ids: string[]): Promise<User[]> {
+  const supabase = getSupabase();
+  if (!supabase || ids.length === 0) return [];
+
+  const { data, error } = await supabase.from('profiles').select('*').in('id', ids);
+  if (error) throw error;
+  return (data ?? []).map((row) => profileRowToUser(row as ProfileRow));
+}
+
 interface GroupRow {
   id: string;
   name: string;
@@ -63,26 +72,40 @@ function groupRowToGroup(row: GroupRow, memberIds: string[]): Group {
     createdAt: new Date(row.created_at).getTime(),
     createdBy: row.created_by,
     memberIds,
+    inviteToken: row.invite_token,
   };
 }
 
-export async function createGroup(group: Omit<Group, 'memberIds'>): Promise<void> {
+/**
+ * Crea un grupo en Supabase y devuelve el `Group` completo (incluyendo el
+ * `inviteToken` real generado por el default de la tabla), para que el
+ * caller pueda renderizar el link de invitación inmediatamente.
+ */
+export async function createGroup(group: Omit<Group, 'memberIds' | 'inviteToken'>): Promise<Group> {
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase) {
+    return { ...group, memberIds: [group.createdBy], inviteToken: '' };
+  }
 
-  const { error: groupError } = await supabase.from('groups').insert({
-    id: group.id,
-    name: group.name,
-    emoji: group.emoji,
-    currency: group.currency,
-    created_by: group.createdBy,
-  });
+  const { data, error: groupError } = await supabase
+    .from('groups')
+    .insert({
+      id: group.id,
+      name: group.name,
+      emoji: group.emoji,
+      currency: group.currency,
+      created_by: group.createdBy,
+    })
+    .select()
+    .single();
   if (groupError) throw groupError;
 
   const { error: memberError } = await supabase
     .from('group_members')
     .insert({ group_id: group.id, user_id: group.createdBy });
   if (memberError) throw memberError;
+
+  return groupRowToGroup(data as GroupRow, [group.createdBy]);
 }
 
 /** Upsert genérico usado por el outbox (sync last-write-wins). */
@@ -140,6 +163,49 @@ export async function joinGroup(groupId: string, userId: string): Promise<void> 
     .from('group_members')
     .upsert({ group_id: groupId, user_id: userId });
   if (error) throw error;
+}
+
+interface ResolveInviteTokenRow {
+  id: string;
+  name: string;
+  emoji: string;
+  currency: string;
+}
+
+/**
+ * Resuelve un token de invitación a su grupo (preview), usable por
+ * cualquier usuario autenticado aunque todavía no sea miembro. Usa la RPC
+ * `resolve_invite_token` (SECURITY DEFINER). Devuelve null si no existe.
+ */
+export async function resolveInviteToken(
+  token: string
+): Promise<{ id: string; name: string; emoji: string; currency: string } | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase.rpc('resolve_invite_token', { token });
+  if (error) throw error;
+
+  const rows = (data ?? []) as ResolveInviteTokenRow[];
+  if (rows.length === 0) return null;
+
+  const row = rows[0];
+  return { id: row.id, name: row.name, emoji: row.emoji, currency: row.currency };
+}
+
+/**
+ * Resuelve el token y une al usuario autenticado actual al grupo
+ * correspondiente, vía la RPC `join_group_by_invite_token` (SECURITY
+ * DEFINER). Lanza `invalid_invite_token` si el token no es válido.
+ */
+export async function joinGroupByInviteToken(token: string): Promise<string> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase no configurado');
+
+  const { data, error } = await supabase.rpc('join_group_by_invite_token', { token });
+  if (error) throw error;
+
+  return data as string;
 }
 
 export async function fetchGroupsForUser(userId: string): Promise<Group[]> {

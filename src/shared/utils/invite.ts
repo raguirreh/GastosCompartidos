@@ -1,22 +1,11 @@
-import { generateUUID } from './uuid';
-
-const APP_BASE_URL = 'https://splitapp.com';
-
-export interface GroupInvite {
-  token: string;
-  link: string;
-}
+const APP_BASE_URL = 'https://gastoscompartidos.raguirre-contact.workers.dev';
 
 /**
- * Genera un token único y el link de invitación asociado a un grupo.
- * El token combina un UUID con el timestamp actual para reducir aún más
- * la probabilidad de colisión y facilitar trazabilidad/expiración futura.
+ * Arma el link de invitación a un grupo a partir de su `inviteToken` real
+ * (columna `invite_token` en la tabla `groups`, generada por Postgres).
  */
-export function generateGroupInvite(groupId: string): GroupInvite {
-  const groupToken = `${generateUUID()}-${Date.now()}`;
-  const inviteLink = `${APP_BASE_URL}/join/${groupToken}`;
-
-  return { token: groupToken, link: inviteLink };
+export function buildGroupInviteLink(inviteToken: string): string {
+  return `${APP_BASE_URL}/join/${inviteToken}`;
 }
 
 /**

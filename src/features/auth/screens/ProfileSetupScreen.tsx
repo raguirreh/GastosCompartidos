@@ -5,7 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 import type { RootStackParamList } from '../../../app/navigation/types';
 import { Avatar } from '../../../shared/components/Avatar';
-import { generateUUID } from '../../../shared/utils/uuid';
+import { joinGroupByInviteToken, upsertProfile } from '../../../services/supabase/api';
+import { useAuthStore } from '../../../store/authStore';
 import { useUserStore } from '../../../store';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ProfileSetup'>;
@@ -16,23 +17,45 @@ const COLOR_OPTIONS = ['#D3E6F5', '#FCE4EC', '#E1F5E5', '#FFF3E0', '#E8E1F5', '#
 export function ProfileSetupScreen({ navigation }: Props) {
   const theme = useTheme();
   const setCurrentUser = useUserStore((s) => s.setCurrentUser);
+  const session = useAuthStore((s) => s.session);
+  const pendingInviteToken = useAuthStore((s) => s.pendingInviteToken);
+  const setPendingInviteToken = useAuthStore((s) => s.setPendingInviteToken);
 
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState(EMOJI_OPTIONS[0]);
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    if (!name.trim()) return;
+  const handleSubmit = async () => {
+    if (!name.trim() || !session?.user.id) return;
 
-    setCurrentUser({
-      uid: generateUUID(),
-      name: name.trim(),
-      emoji,
-      avatarColor: color,
-      createdAt: Date.now(),
-    });
+    setIsSubmitting(true);
+    try {
+      const user = {
+        uid: session.user.id,
+        name: name.trim(),
+        emoji,
+        avatarColor: color,
+        createdAt: Date.now(),
+      };
 
-    navigation.replace('Main');
+      await upsertProfile(user);
+      setCurrentUser(user);
+
+      if (pendingInviteToken) {
+        try {
+          await joinGroupByInviteToken(pendingInviteToken);
+        } catch {
+          // El token podría haber expirado o ya estar usado: no bloqueamos el flujo.
+        } finally {
+          setPendingInviteToken(null);
+        }
+      }
+
+      navigation.replace('Main');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -95,7 +118,8 @@ export function ProfileSetupScreen({ navigation }: Props) {
           <Button
             mode="contained"
             onPress={handleSubmit}
-            disabled={!name.trim()}
+            disabled={!name.trim() || isSubmitting}
+            loading={isSubmitting}
             style={styles.submitButton}
             contentStyle={styles.submitButtonContent}
           >
