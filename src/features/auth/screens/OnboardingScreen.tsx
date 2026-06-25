@@ -57,7 +57,7 @@ export function OnboardingScreen({ navigation }: Props) {
 
   const handleFinish = () => {
     completeOnboarding();
-    navigation.replace('ProfileSetup');
+    navigation.replace('Login');
   };
 
   return (
