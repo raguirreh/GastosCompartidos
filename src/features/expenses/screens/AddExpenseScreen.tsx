@@ -2,7 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Chip, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Chip, HelperText, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import type { GroupsStackParamList } from '../../../app/navigation/types';
 import { Avatar } from '../../../shared/components/Avatar';
 import type { ExpenseCategory, SplitMode } from '../../../shared/types';
@@ -49,6 +49,11 @@ export function AddExpenseScreen({ route, navigation }: Props) {
   const [notes, setNotes] = useState('');
   const [participantIds, setParticipantIds] = useState<string[]>(group?.memberIds ?? []);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (group) setParticipantIds(group.memberIds);
+  }, [group]);
 
   useEffect(() => {
     if (group) setParticipantIds(group.memberIds);
@@ -66,6 +71,7 @@ export function AddExpenseScreen({ route, navigation }: Props) {
     if (!description.trim() || numericAmount <= 0 || !paidBy || participantIds.length === 0) return;
     if (!currentUser || !group) return;
 
+    setError('');
     setIsSubmitting(true);
     try {
       await addExpense({
@@ -82,6 +88,8 @@ export function AddExpenseScreen({ route, navigation }: Props) {
         participantIds,
       });
       navigation.goBack();
+    } catch (err) {
+      setError('No pudimos agregar el gasto. Inténtalo de nuevo.');
     } finally {
       setIsSubmitting(false);
     }
@@ -234,6 +242,7 @@ export function AddExpenseScreen({ route, navigation }: Props) {
           >
             Agregar gasto
           </Button>
+          {error.length > 0 && <HelperText type="error">{error}</HelperText>}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

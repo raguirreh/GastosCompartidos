@@ -44,9 +44,11 @@ export function ProfileScreen() {
     try {
       await resetDatabase();
       clearUser();
+      setClearDialogVisible(false);
+    } catch (err) {
+      Alert.alert('Error', 'No pudimos limpiar tus datos locales. Inténtalo de nuevo.');
     } finally {
       setIsClearing(false);
-      setClearDialogVisible(false);
     }
   };
 

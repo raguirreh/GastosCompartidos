@@ -2,7 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Menu, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, HelperText, Menu, Text, TextInput, useTheme } from 'react-native-paper';
 import type { GroupsStackParamList } from '../../../app/navigation/types';
 import { useGroupsStore, useUserStore } from '../../../store';
 
@@ -21,10 +21,12 @@ export function CreateGroupScreen({ navigation }: Props) {
   const [currency, setCurrency] = useState('PEN');
   const [menuVisible, setMenuVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleCreate = async () => {
     if (!name.trim() || !currentUser) return;
 
+    setError('');
     setIsSubmitting(true);
     try {
       const group = await createGroup({
@@ -34,6 +36,8 @@ export function CreateGroupScreen({ navigation }: Props) {
         createdBy: currentUser.uid,
       });
       navigation.replace('GroupDetail', { groupId: group.id });
+    } catch (err) {
+      setError('No pudimos crear el grupo. Inténtalo de nuevo.');
     } finally {
       setIsSubmitting(false);
     }
@@ -107,6 +111,7 @@ export function CreateGroupScreen({ navigation }: Props) {
           >
             Crear grupo
           </Button>
+          {error.length > 0 && <HelperText type="error">{error}</HelperText>}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

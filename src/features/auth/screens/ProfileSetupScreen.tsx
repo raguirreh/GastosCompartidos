@@ -2,7 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
 import type { RootStackParamList } from '../../../app/navigation/types';
 import { Avatar } from '../../../shared/components/Avatar';
 import { joinGroupByInviteToken, upsertProfile } from '../../../services/supabase/api';
@@ -25,10 +25,12 @@ export function ProfileSetupScreen({ navigation }: Props) {
   const [emoji, setEmoji] = useState(EMOJI_OPTIONS[0]);
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async () => {
     if (!name.trim() || !session?.user.id) return;
 
+    setError('');
     setIsSubmitting(true);
     try {
       const user = {
@@ -53,6 +55,8 @@ export function ProfileSetupScreen({ navigation }: Props) {
       }
 
       navigation.replace('Main');
+    } catch (err) {
+      setError('No pudimos guardar tu perfil. Inténtalo de nuevo.');
     } finally {
       setIsSubmitting(false);
     }
@@ -125,6 +129,7 @@ export function ProfileSetupScreen({ navigation }: Props) {
           >
             Entrar a la app
           </Button>
+          {error.length > 0 && <HelperText type="error">{error}</HelperText>}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
