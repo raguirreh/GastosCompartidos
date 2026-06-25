@@ -55,6 +55,10 @@ export function AddExpenseScreen({ route, navigation }: Props) {
     if (group) setParticipantIds(group.memberIds);
   }, [group]);
 
+  useEffect(() => {
+    if (group) setParticipantIds(group.memberIds);
+  }, [group]);
+
   const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
 
   const toggleParticipant = (userId: string) => {
