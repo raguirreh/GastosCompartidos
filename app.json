@@ -1,17 +1,20 @@
 {
   "expo": {
-    "name": "GastosCompartidos",
-    "slug": "GastosCompartidos",
+    "name": "Gastos Compartidos",
+    "slug": "gastos-compartidos",
+    "scheme": "gastoscompartidos",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gastoscompartidos.app"
     },
     "android": {
+      "package": "com.gastoscompartidos.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1B6CA8",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
