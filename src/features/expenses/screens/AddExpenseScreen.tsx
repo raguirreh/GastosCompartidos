@@ -101,8 +101,8 @@ export function AddExpenseScreen({ route, navigation }: Props) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <Text variant="headlineSmall" style={styles.title}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" role="main">
+          <Text variant="headlineSmall" style={styles.title} accessibilityRole="header" aria-level={1}>
             Agregar gasto
           </Text>
 

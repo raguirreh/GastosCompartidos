@@ -68,13 +68,14 @@ export function GroupsListScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <View style={styles.header}>
-        <Text variant="headlineSmall" style={styles.title}>
+      <View style={styles.header} role="banner">
+        <Text variant="headlineSmall" style={styles.title} accessibilityRole="header" aria-level={1}>
           Grupos
         </Text>
       </View>
 
       <FlatList
+        role="main"
         data={groups}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
@@ -92,9 +93,11 @@ export function GroupsListScreen({ navigation }: Props) {
             <Card
               style={styles.groupCard}
               onPress={() => navigation.navigate('GroupDetail', { groupId: item.id })}
+              accessibilityRole="button"
+              accessibilityLabel={item.name}
             >
               <Card.Content style={styles.groupCardContent}>
-                <Text style={styles.groupEmoji}>{item.emoji}</Text>
+                <Text style={styles.groupEmoji} aria-hidden importantForAccessibility="no">{item.emoji}</Text>
                 <View style={styles.groupInfo}>
                   <Text variant="titleMedium" numberOfLines={1}>
                     {item.name}
@@ -113,7 +116,14 @@ export function GroupsListScreen({ navigation }: Props) {
                             : theme.colors.error,
                     }}
                   >
-                    {balance === 0 ? 'Saldado' : formatMoney(balance, item.currency)}
+                    {balance === 0 ? (
+                      'Saldado'
+                    ) : (
+                      <>
+                        <Text aria-hidden importantForAccessibility="no">{balance > 0 ? '↑ ' : '↓ '}</Text>
+                        {formatMoney(balance, item.currency)} {balance > 0 ? '(a tu favor)' : '(debes)'}
+                      </>
+                    )}
                   </Text>
                 </View>
               </Card.Content>

@@ -67,14 +67,14 @@ export function GroupDetailScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+      <View style={styles.header} role="banner">
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} accessibilityLabel="Volver" />
         <View style={styles.headerTitleWrapper}>
-          <Text variant="titleLarge" numberOfLines={1}>
+          <Text variant="titleLarge" numberOfLines={1} accessibilityRole="header" aria-level={1} accessibilityLabel={group.name}>
             {group.emoji} {group.name}
           </Text>
         </View>
-        <IconButton icon="account-plus" onPress={() => setInviteVisible(true)} />
+        <IconButton icon="account-plus" onPress={() => setInviteVisible(true)} accessibilityLabel="Invitar miembro" />
       </View>
 
       <SegmentedButtons
@@ -89,7 +89,7 @@ export function GroupDetailScreen({ route, navigation }: Props) {
       />
 
       {tab === 'expenses' && (
-        <ScrollView contentContainerStyle={styles.tabContent}>
+        <ScrollView contentContainerStyle={styles.tabContent} role="main">
           {groupExpenses.length === 0 && (
             <Text style={styles.emptyText}>Todavía no hay gastos en este grupo.</Text>
           )}
@@ -117,8 +117,8 @@ export function GroupDetailScreen({ route, navigation }: Props) {
       )}
 
       {tab === 'balances' && (
-        <ScrollView contentContainerStyle={styles.tabContent}>
-          <Text variant="labelLarge" style={styles.sectionLabel}>
+        <ScrollView contentContainerStyle={styles.tabContent} role="main">
+          <Text variant="labelLarge" style={styles.sectionLabel} accessibilityRole="header" aria-level={2}>
             Pagos sugeridos (mínimo de transacciones)
           </Text>
           {settlements.length === 0 && (
@@ -139,7 +139,8 @@ export function GroupDetailScreen({ route, navigation }: Props) {
                 </Card.Content>
                 <Card.Content>
                   <Text variant="titleMedium" style={{ color: theme.colors.error }}>
-                    {formatMoney(settlement.amount, group.currency)}
+                    <Text aria-hidden importantForAccessibility="no">↓ </Text>
+                    {formatMoney(settlement.amount, group.currency)} (deuda pendiente)
                   </Text>
                 </Card.Content>
               </Card>
@@ -149,7 +150,7 @@ export function GroupDetailScreen({ route, navigation }: Props) {
       )}
 
       {tab === 'members' && (
-        <ScrollView contentContainerStyle={styles.tabContent}>
+        <ScrollView contentContainerStyle={styles.tabContent} role="main">
           {group.memberIds.map((memberId) => {
             const member = profiles[memberId];
             if (!member) return null;

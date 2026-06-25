@@ -1,3 +1,4 @@
+import './src/styles/global';
 import { NavigationContainer, type LinkingOptions } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';

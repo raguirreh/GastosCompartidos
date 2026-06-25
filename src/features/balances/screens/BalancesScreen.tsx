@@ -134,7 +134,8 @@ export function BalancesScreen() {
             variant="titleSmall"
             style={{ color: type === 'owed' ? theme.colors.tertiary : theme.colors.error }}
           >
-            {formatMoney(Math.abs(entry.amount), group.currency)}
+            <Text aria-hidden importantForAccessibility="no">{type === 'owed' ? '↑ ' : '↓ '}</Text>
+            {formatMoney(Math.abs(entry.amount), group.currency)} {type === 'owed' ? '(a tu favor)' : '(debes)'}
           </Text>
         </Card.Content>
         <Card.Actions>
@@ -166,8 +167,8 @@ export function BalancesScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text variant="headlineSmall" style={styles.title}>
+      <ScrollView contentContainerStyle={styles.scrollContent} role="main">
+        <Text variant="headlineSmall" style={styles.title} accessibilityRole="header" aria-level={1}>
           Saldos
         </Text>
 
@@ -183,18 +184,19 @@ export function BalancesScreen() {
                 fontWeight: '700',
               }}
             >
-              {formatMoney(netTotal, 'PEN')}
+              <Text aria-hidden importantForAccessibility="no">{netTotal >= 0 ? '↑ ' : '↓ '}</Text>
+              {formatMoney(netTotal, 'PEN')} {netTotal >= 0 ? '(a tu favor)' : '(debes)'}
             </Text>
           </Card.Content>
         </Card>
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>
+        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
           Te deben
         </Text>
         {owedToMe.length === 0 && <Text style={styles.emptyText}>Nadie te debe dinero ahora.</Text>}
         {owedToMe.map((entry) => renderEntry(entry, 'owed'))}
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>
+        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
           Debes
         </Text>
         {owedByMe.length === 0 && <Text style={styles.emptyText}>No le debes dinero a nadie ahora.</Text>}

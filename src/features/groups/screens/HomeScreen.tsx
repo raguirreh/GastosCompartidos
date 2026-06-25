@@ -81,10 +81,12 @@ export function HomeScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
+      <ScrollView contentContainerStyle={styles.scrollContent} role="main">
+        <View style={styles.header} role="banner">
           <View>
-            <Text variant="titleMedium">Hola, {currentUser?.name ?? 'Usuario'} {currentUser?.emoji}</Text>
+            <Text variant="titleMedium" accessibilityRole="header" aria-level={1}>
+              Hola, {currentUser?.name ?? 'Usuario'} {currentUser?.emoji}
+            </Text>
             <Text variant="bodySmall" style={styles.headerSubtitle}>
               Esto es lo que pasa con tu dinero
             </Text>
@@ -101,26 +103,29 @@ export function HomeScreen({ navigation }: Props) {
               variant="displaySmall"
               style={{ color: net >= 0 ? theme.colors.tertiary : theme.colors.error, fontWeight: '700' }}
             >
-              {formatMoney(net, 'PEN')}
+              <Text aria-hidden importantForAccessibility="no">{net >= 0 ? '↑ ' : '↓ '}</Text>
+              {formatMoney(net, 'PEN')} {net >= 0 ? '(a tu favor)' : '(debes)'}
             </Text>
             <View style={styles.balanceRow}>
               <View style={styles.balanceItem}>
                 <Text variant="bodySmall" style={styles.balanceItemLabel}>Te deben</Text>
                 <Text variant="titleMedium" style={{ color: theme.colors.tertiary }}>
-                  {formatMoney(owed, 'PEN')}
+                  <Text aria-hidden importantForAccessibility="no">↑ </Text>
+                  {formatMoney(owed, 'PEN')} (a tu favor)
                 </Text>
               </View>
               <View style={styles.balanceItem}>
                 <Text variant="bodySmall" style={styles.balanceItemLabel}>Debes</Text>
                 <Text variant="titleMedium" style={{ color: theme.colors.error }}>
-                  {formatMoney(owe, 'PEN')}
+                  <Text aria-hidden importantForAccessibility="no">↓ </Text>
+                  {formatMoney(owe, 'PEN')} (debes)
                 </Text>
               </View>
             </View>
           </Card.Content>
         </Card>
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>
+        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
           Tus grupos
         </Text>
         {groups.length === 0 ? (
@@ -132,9 +137,11 @@ export function HomeScreen({ navigation }: Props) {
                 key={group.id}
                 style={styles.groupCard}
                 onPress={() => navigation.navigate('Groups', { screen: 'GroupDetail', params: { groupId: group.id } } as never)}
+                accessibilityRole="button"
+                accessibilityLabel={`${group.name}, ${group.memberIds.length} miembros`}
               >
                 <Card.Content>
-                  <Text style={styles.groupEmoji}>{group.emoji}</Text>
+                  <Text style={styles.groupEmoji} aria-hidden importantForAccessibility="no">{group.emoji}</Text>
                   <Text variant="titleSmall" numberOfLines={1}>
                     {group.name}
                   </Text>
@@ -147,7 +154,7 @@ export function HomeScreen({ navigation }: Props) {
           </ScrollView>
         )}
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>
+        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
           Actividad reciente
         </Text>
         {recentActivity.length === 0 && (
