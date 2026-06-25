@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, Dialog, Portal, Text, useTheme } from 'react-native-paper';
 import { Avatar } from '../../../shared/components/Avatar';
-import { buildWhatsAppPaymentRequestUrl } from '../../../shared/utils/invite';
+import { buildWhatsAppPaymentRequestUrl, buildWhatsAppWebPaymentRequestUrl } from '../../../shared/utils/invite';
 import { formatMoney, getCurrencySymbol } from '../../../shared/utils/format';
 import { getMockUserById, mockGroups } from '../../../shared/utils/mockData';
+import { openWhatsApp } from '../../../shared/utils/share';
 import { useUserStore } from '../../../store';
 
 interface MockSettlementEntry {
@@ -44,13 +45,19 @@ export function BalancesScreen() {
     const group = mockGroups.find((g) => g.id === entry.groupId);
     if (!debtor || !group) return;
 
-    const url = buildWhatsAppPaymentRequestUrl(
+    const nativeUrl = buildWhatsAppPaymentRequestUrl(
       debtor.name,
       Math.abs(entry.amount),
       getCurrencySymbol(group.currency),
       group.name
     );
-    Linking.openURL(url).catch(() => {
+    const webUrl = buildWhatsAppWebPaymentRequestUrl(
+      debtor.name,
+      Math.abs(entry.amount),
+      getCurrencySymbol(group.currency),
+      group.name
+    );
+    openWhatsApp(nativeUrl, webUrl).catch(() => {
       // Si WhatsApp no está instalado, no hacemos nada más: esto es un mock honesto.
     });
     closeDialog();

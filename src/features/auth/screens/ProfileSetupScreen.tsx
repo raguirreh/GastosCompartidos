@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 import type { RootStackParamList } from '../../../app/navigation/types';
@@ -80,14 +80,14 @@ export function ProfileSetupScreen({ navigation }: Props) {
           </Text>
           <View style={styles.optionsRow}>
             {COLOR_OPTIONS.map((option) => (
-              <View
+              <Pressable
                 key={option}
+                onPress={() => setColor(option)}
                 style={[
                   styles.colorSwatch,
                   { backgroundColor: option },
                   option === color && { borderWidth: 3, borderColor: theme.colors.primary },
                 ]}
-                onTouchEnd={() => setColor(option)}
               />
             ))}
           </View>

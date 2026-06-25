@@ -1,10 +1,10 @@
 import * as Clipboard from 'expo-clipboard';
-import * as Sharing from 'expo-sharing';
 import React, { useMemo, useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { Button, Modal, Portal, Text, useTheme } from 'react-native-paper';
-import { buildWhatsAppInviteUrl, generateGroupInvite } from '../utils/invite';
+import { buildWhatsAppInviteUrl, buildWhatsAppWebInviteUrl, generateGroupInvite } from '../utils/invite';
+import { openWhatsApp, shareOrCopy } from '../utils/share';
 
 interface InviteModalProps {
   visible: boolean;
@@ -27,20 +27,16 @@ export function InviteModal({ visible, onDismiss, groupId, groupName }: InviteMo
   };
 
   const handleWhatsApp = async () => {
-    const url = buildWhatsAppInviteUrl(groupName, invite.link);
-    const canOpen = await Linking.canOpenURL(url);
-    if (canOpen) {
-      await Linking.openURL(url);
-    } else {
-      await Sharing.shareAsync(invite.link);
+    const nativeUrl = buildWhatsAppInviteUrl(groupName, invite.link);
+    const webUrl = buildWhatsAppWebInviteUrl(groupName, invite.link);
+    const opened = await openWhatsApp(nativeUrl, webUrl);
+    if (!opened) {
+      await shareOrCopy(invite.link);
     }
   };
 
   const handleNativeShare = async () => {
-    const available = await Sharing.isAvailableAsync();
-    if (available) {
-      await Sharing.shareAsync(invite.link);
-    }
+    await shareOrCopy(invite.link);
   };
 
   return (

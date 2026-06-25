@@ -37,6 +37,16 @@ export function buildWhatsAppInviteUrl(groupName: string, inviteLink: string): s
 }
 
 /**
+ * Igual que `buildWhatsAppInviteUrl` pero usando el esquema `https://wa.me`,
+ * que sí abre WhatsApp Web/desktop en navegador (el esquema `whatsapp://`
+ * no es resoluble desde la web).
+ */
+export function buildWhatsAppWebInviteUrl(groupName: string, inviteLink: string): string {
+  const message = buildInviteMessage(groupName, inviteLink);
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
+
+/**
  * Arma el mensaje de "solicitud de pago" a un usuario que debe dinero
  * dentro de un grupo, listo para compartir por WhatsApp.
  */
@@ -64,4 +74,16 @@ export function buildWhatsAppPaymentRequestUrl(
 ): string {
   const message = buildPaymentRequestMessage(debtorName, amount, currencySymbol, groupName, link);
   return `whatsapp://send?text=${encodeURIComponent(message)}`;
+}
+
+/** Igual que `buildWhatsAppPaymentRequestUrl` pero usando `https://wa.me` para web. */
+export function buildWhatsAppWebPaymentRequestUrl(
+  debtorName: string,
+  amount: number,
+  currencySymbol: string,
+  groupName: string,
+  link?: string
+): string {
+  const message = buildPaymentRequestMessage(debtorName, amount, currencySymbol, groupName, link);
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
