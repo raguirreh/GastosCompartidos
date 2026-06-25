@@ -4,16 +4,16 @@ import {
   incrementOutboxRetries,
   removeOutboxItem,
 } from '../database/outboxRepository';
-import { upsertExpenseDoc, upsertGroupDoc } from '../firebase/firestoreHelpers';
+import { upsertExpenseDoc, upsertGroupDoc } from '../supabase/api';
 
 const MAX_RETRIES = 5;
 
 /**
  * Procesa el outbox local intentando sincronizar cada item pendiente con
- * Firestore. Implementa "last-write-wins": como cada item lleva su propio
- * `createdAt`/`updatedAt`, al hacer `setDoc(..., { merge: true })` el
- * último escritor gana sobre el campo modificado. Si Firebase no está
- * configurado (ver firebaseConfig.ts), esta función es un no-op seguro.
+ * Supabase (Postgres). Implementa "last-write-wins": cada upsert reemplaza
+ * la fila remota por la versión local más reciente. Si Supabase no está
+ * configurado (ver services/supabase/client.ts), esta función es un no-op
+ * seguro.
  *
  * Se invoca cuando `useNetworkStatus` detecta que volvimos a tener
  * conectividad.
