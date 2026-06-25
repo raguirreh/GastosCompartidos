@@ -28,7 +28,12 @@ export function ProfileSetupScreen({ navigation }: Props) {
   const [error, setError] = useState('');
 
   const handleSubmit = async () => {
-    if (!name.trim() || !session?.user.id) return;
+    if (!name.trim()) return;
+    if (!session?.user.id) {
+      setError('Tu sesión expiró. Inicia sesión de nuevo.');
+      navigation.replace('Login');
+      return;
+    }
 
     setError('');
     setIsSubmitting(true);
