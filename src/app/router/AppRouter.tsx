@@ -1,0 +1,44 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { SplashScreen } from '../../features/auth/screens/SplashScreen';
+import { OnboardingScreen } from '../../features/auth/screens/OnboardingScreen';
+import { LoginScreen } from '../../features/auth/screens/LoginScreen';
+import { SignUpScreen } from '../../features/auth/screens/SignUpScreen';
+import { ProfileSetupScreen } from '../../features/auth/screens/ProfileSetupScreen';
+import { JoinGroupScreen } from '../../features/groups/screens/JoinGroupScreen';
+import { HomeScreen } from '../../features/groups/screens/HomeScreen';
+import { GroupsListScreen } from '../../features/groups/screens/GroupsListScreen';
+import { GroupDetailScreen } from '../../features/groups/screens/GroupDetailScreen';
+import { CreateGroupScreen } from '../../features/groups/screens/CreateGroupScreen';
+import { AddExpenseScreen } from '../../features/expenses/screens/AddExpenseScreen';
+import { BalancesScreen } from '../../features/balances/screens/BalancesScreen';
+import { ProfileScreen } from '../../features/profile/screens/ProfileScreen';
+import { MainLayout } from './MainLayout';
+import { RequireAuth } from './RequireAuth';
+
+export function AppRouter() {
+  return (
+    <Routes>
+      <Route path="/" element={<SplashScreen />} />
+      <Route path="/onboarding" element={<OnboardingScreen />} />
+      <Route path="/login" element={<LoginScreen />} />
+      <Route path="/signup" element={<SignUpScreen />} />
+      <Route path="/profile-setup" element={<ProfileSetupScreen />} />
+      <Route path="/join/:token" element={<JoinGroupScreen />} />
+
+      <Route element={<RequireAuth />}>
+        <Route path="/app" element={<MainLayout />}>
+          <Route path="home" element={<HomeScreen />} />
+          <Route path="groups" element={<GroupsListScreen />} />
+          <Route path="groups/new" element={<CreateGroupScreen />} />
+          <Route path="groups/:groupId" element={<GroupDetailScreen />} />
+          <Route path="groups/:groupId/add-expense" element={<AddExpenseScreen />} />
+          <Route path="balances" element={<BalancesScreen />} />
+          <Route path="profile" element={<ProfileScreen />} />
+          <Route index element={<Navigate to="home" replace />} />
+        </Route>
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

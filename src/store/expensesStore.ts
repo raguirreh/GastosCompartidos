@@ -1,7 +1,4 @@
-import { Platform } from 'react-native';
 import { create } from 'zustand';
-import { insertExpense } from '../services/database/expensesRepository';
-import { enqueueOutboxItem } from '../services/database/outboxRepository';
 import { createExpense as createExpenseRemote, fetchExpensesForGroup } from '../services/supabase/api';
 import type { Expense, ExpenseCategory, Split, SplitMode } from '../shared/types';
 import { roundCurrency } from '../shared/utils/debtSimplification';
@@ -133,7 +130,7 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       splits,
       createdBy: input.createdBy,
       createdAt: Date.now(),
-      syncStatus: Platform.OS === 'web' ? 'synced' : 'pending',
+      syncStatus: 'synced',
     };
 
     set((state) => {
@@ -146,12 +143,7 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       };
     });
 
-    if (Platform.OS === 'web') {
-      await createExpenseRemote(expense);
-    } else {
-      await insertExpense(expense);
-      await enqueueOutboxItem('create_expense', expense);
-    }
+    await createExpenseRemote(expense);
 
     return expense;
   },

@@ -1,7 +1,4 @@
-import { Platform } from 'react-native';
 import { create } from 'zustand';
-import { insertGroup } from '../services/database/groupsRepository';
-import { enqueueOutboxItem } from '../services/database/outboxRepository';
 import { createGroup as createGroupRemote, fetchGroupsForUser } from '../services/supabase/api';
 import type { Group } from '../shared/types';
 import { generateUUID } from '../shared/utils/uuid';
@@ -40,37 +37,16 @@ export const useGroupsStore = create<GroupsState>((set, get) => ({
   },
 
   createGroup: async (input) => {
-    if (Platform.OS === 'web') {
-      const newGroup = await createGroupRemote({
-        id: generateUUID(),
-        name: input.name,
-        emoji: input.emoji,
-        currency: input.currency,
-        createdAt: Date.now(),
-        createdBy: input.createdBy,
-      });
-
-      set((state) => ({ groups: [newGroup, ...state.groups] }));
-      return newGroup;
-    }
-
-    const newGroup: Group = {
+    const newGroup = await createGroupRemote({
       id: generateUUID(),
       name: input.name,
       emoji: input.emoji,
       currency: input.currency,
       createdAt: Date.now(),
       createdBy: input.createdBy,
-      memberIds: [input.createdBy],
-      inviteToken: '',
-    };
+    });
 
     set((state) => ({ groups: [newGroup, ...state.groups] }));
-
-    // Persistimos en SQLite (fuente de verdad) y encolamos para sync.
-    await insertGroup(newGroup);
-    await enqueueOutboxItem('create_group', newGroup);
-
     return newGroup;
   },
 

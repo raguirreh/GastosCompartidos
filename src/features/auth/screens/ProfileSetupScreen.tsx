@@ -1,21 +1,16 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
-import type { RootStackParamList } from '../../../app/navigation/types';
+import { Alert, Button, Form, Input, Typography } from 'antd';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
 import { joinGroupByInviteToken, upsertProfile } from '../../../services/supabase/api';
 import { useAuthStore } from '../../../store/authStore';
-import { useUserStore } from '../../../store';
-
-type Props = NativeStackScreenProps<RootStackParamList, 'ProfileSetup'>;
+import { useUserStore } from '../../../store/userStore';
 
 const EMOJI_OPTIONS = ['🧑', '👩', '🧔', '👩‍🦱', '🧑‍🦰', '👨‍🦲', '🧓', '🐱'];
 const COLOR_OPTIONS = ['#D3E6F5', '#FCE4EC', '#E1F5E5', '#FFF3E0', '#E8E1F5', '#D9F0F5'];
 
-export function ProfileSetupScreen({ navigation }: Props) {
-  const theme = useTheme();
+export function ProfileSetupScreen() {
+  const navigate = useNavigate();
   const setCurrentUser = useUserStore((s) => s.setCurrentUser);
   const session = useAuthStore((s) => s.session);
   const pendingInviteToken = useAuthStore((s) => s.pendingInviteToken);
@@ -31,7 +26,7 @@ export function ProfileSetupScreen({ navigation }: Props) {
     if (!name.trim()) return;
     if (!session?.user.id) {
       setError('Tu sesión expiró. Inicia sesión de nuevo.');
-      navigation.replace('Login');
+      navigate('/login', { replace: true });
       return;
     }
 
@@ -59,8 +54,8 @@ export function ProfileSetupScreen({ navigation }: Props) {
         }
       }
 
-      navigation.replace('Main');
-    } catch (err) {
+      navigate('/app/home', { replace: true });
+    } catch {
       setError('No pudimos guardar tu perfil. Inténtalo de nuevo.');
     } finally {
       setIsSubmitting(false);
@@ -68,122 +63,70 @@ export function ProfileSetupScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <Text variant="headlineSmall" style={styles.title}>
-            Cuéntanos sobre ti
-          </Text>
+    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 480 }}>
+        <Typography.Title level={3} style={{ marginBottom: 24 }}>
+          Cuéntanos sobre ti
+        </Typography.Title>
 
-          <View style={styles.avatarPreview}>
-            <Avatar emoji={emoji} color={color} size={88} />
-          </View>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+          <Avatar emoji={emoji} color={color} size={88} />
+        </div>
 
-          <TextInput
-            label="¿Cómo te llamas?"
-            value={name}
-            onChangeText={setName}
-            mode="outlined"
-            style={styles.input}
-          />
+        <Form layout="vertical" disabled={isSubmitting}>
+          <Form.Item label="¿Cómo te llamas?">
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </Form.Item>
 
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Elige un avatar
-          </Text>
-          <View style={styles.optionsRow}>
+          <Typography.Text strong>Elige un avatar</Typography.Text>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 16px' }}>
             {EMOJI_OPTIONS.map((option) => (
               <Button
                 key={option}
-                mode={option === emoji ? 'contained' : 'outlined'}
-                onPress={() => setEmoji(option)}
-                style={styles.emojiButton}
-                compact
+                type={option === emoji ? 'primary' : 'default'}
+                onClick={() => setEmoji(option)}
+                style={{ minWidth: 48 }}
+                aria-label={`Avatar ${option}`}
               >
                 {option}
               </Button>
             ))}
-          </View>
+          </div>
 
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Elige un color
-          </Text>
-          <View style={styles.optionsRow}>
+          <Typography.Text strong>Elige un color</Typography.Text>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 16px' }}>
             {COLOR_OPTIONS.map((option) => (
-              <Pressable
+              <button
                 key={option}
-                onPress={() => setColor(option)}
-                style={[
-                  styles.colorSwatch,
-                  { backgroundColor: option },
-                  option === color && { borderWidth: 3, borderColor: theme.colors.primary },
-                ]}
+                type="button"
+                aria-label={`Color ${option}`}
+                onClick={() => setColor(option)}
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  backgroundColor: option,
+                  border: option === color ? '3px solid var(--ant-color-primary, #1677ff)' : '1px solid transparent',
+                  cursor: 'pointer',
+                }}
               />
             ))}
-          </View>
+          </div>
+
+          {error.length > 0 && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
 
           <Button
-            mode="contained"
-            onPress={handleSubmit}
+            type="primary"
+            block
+            onClick={handleSubmit}
             disabled={!name.trim() || isSubmitting}
             loading={isSubmitting}
-            style={styles.submitButton}
-            contentStyle={styles.submitButtonContent}
+            style={{ height: 48 }}
           >
             Entrar a la app
           </Button>
-          {error.length > 0 && <HelperText type="error">{error}</HelperText>}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </Form>
+      </div>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-  },
-  title: {
-    marginBottom: 24,
-    fontWeight: '700',
-  },
-  avatarPreview: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  input: {
-    marginBottom: 16,
-  },
-  sectionLabel: {
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  optionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  emojiButton: {
-    minWidth: 48,
-  },
-  colorSwatch: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  submitButton: {
-    marginTop: 16,
-  },
-  submitButtonContent: {
-    height: 48,
-  },
-});

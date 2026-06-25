@@ -1,25 +1,20 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, HelperText, Menu, Text, TextInput, useTheme } from 'react-native-paper';
-import type { GroupsStackParamList } from '../../../app/navigation/types';
-import { useGroupsStore, useUserStore } from '../../../store';
-
-type Props = NativeStackScreenProps<GroupsStackParamList, 'CreateGroup'>;
+import { Alert, Button, Form, Input, Select, Typography } from 'antd';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useGroupsStore } from '../../../store/groupsStore';
+import { useUserStore } from '../../../store/userStore';
 
 const EMOJI_OPTIONS = ['🏠', '🏔️', '🍖', '✈️', '🎉', '🚗', '💼', '🎓'];
 const CURRENCIES = ['PEN', 'USD', 'EUR', 'MXN', 'ARS', 'COP'];
 
-export function CreateGroupScreen({ navigation }: Props) {
-  const theme = useTheme();
+export function CreateGroupScreen() {
+  const navigate = useNavigate();
   const currentUser = useUserStore((s) => s.currentUser);
   const createGroup = useGroupsStore((s) => s.createGroup);
 
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState(EMOJI_OPTIONS[0]);
   const [currency, setCurrency] = useState('PEN');
-  const [menuVisible, setMenuVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -35,8 +30,8 @@ export function CreateGroupScreen({ navigation }: Props) {
         currency,
         createdBy: currentUser.uid,
       });
-      navigation.replace('GroupDetail', { groupId: group.id });
-    } catch (err) {
+      navigate(`/app/groups/${group.id}`, { replace: true });
+    } catch {
       setError('No pudimos crear el grupo. Inténtalo de nuevo.');
     } finally {
       setIsSubmitting(false);
@@ -44,117 +39,55 @@ export function CreateGroupScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <Text variant="headlineSmall" style={styles.title}>
-            Crear grupo
-          </Text>
+    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 480 }}>
+        <Typography.Title level={3} style={{ marginBottom: 24 }}>
+          Crear grupo
+        </Typography.Title>
 
-          <TextInput
-            label="Nombre del grupo"
-            value={name}
-            onChangeText={setName}
-            mode="outlined"
-            style={styles.input}
-            placeholder="Ej. Viaje a la playa"
-          />
+        <Form layout="vertical" disabled={isSubmitting}>
+          <Form.Item label="Nombre del grupo">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Viaje a la playa" />
+          </Form.Item>
 
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Emoji
-          </Text>
-          <View style={styles.optionsRow}>
+          <Typography.Text strong>Emoji</Typography.Text>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 16px' }}>
             {EMOJI_OPTIONS.map((option) => (
               <Button
                 key={option}
-                mode={option === emoji ? 'contained' : 'outlined'}
-                onPress={() => setEmoji(option)}
-                style={styles.emojiButton}
-                compact
+                type={option === emoji ? 'primary' : 'default'}
+                onClick={() => setEmoji(option)}
+                style={{ minWidth: 48 }}
+                aria-label={`Emoji ${option}`}
               >
                 {option}
               </Button>
             ))}
-          </View>
+          </div>
 
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Moneda
-          </Text>
-          <Menu
-            visible={menuVisible}
-            onDismiss={() => setMenuVisible(false)}
-            anchor={
-              <Button mode="outlined" onPress={() => setMenuVisible(true)} style={styles.currencyButton}>
-                {currency}
-              </Button>
-            }
-          >
-            {CURRENCIES.map((option) => (
-              <Menu.Item
-                key={option}
-                title={option}
-                onPress={() => {
-                  setCurrency(option);
-                  setMenuVisible(false);
-                }}
-              />
-            ))}
-          </Menu>
+          <Form.Item label="Moneda">
+            <Select
+              value={currency}
+              onChange={setCurrency}
+              options={CURRENCIES.map((option) => ({ value: option, label: option }))}
+              style={{ width: 160 }}
+            />
+          </Form.Item>
+
+          {error.length > 0 && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
 
           <Button
-            mode="contained"
-            onPress={handleCreate}
+            type="primary"
+            block
+            onClick={handleCreate}
             disabled={!name.trim() || isSubmitting}
             loading={isSubmitting}
-            style={styles.submitButton}
-            contentStyle={styles.submitButtonContent}
+            style={{ height: 48 }}
           >
             Crear grupo
           </Button>
-          {error.length > 0 && <HelperText type="error">{error}</HelperText>}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </Form>
+      </div>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-  },
-  title: {
-    marginBottom: 24,
-    fontWeight: '700',
-  },
-  input: {
-    marginBottom: 16,
-  },
-  sectionLabel: {
-    marginBottom: 8,
-  },
-  optionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  emojiButton: {
-    minWidth: 48,
-  },
-  currencyButton: {
-    alignSelf: 'flex-start',
-    marginBottom: 24,
-  },
-  submitButton: {
-    marginTop: 16,
-  },
-  submitButtonContent: {
-    height: 48,
-  },
-});

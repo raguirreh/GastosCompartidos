@@ -1,20 +1,18 @@
-import NetInfo from '@react-native-community/netinfo';
 import { useEffect, useState } from 'react';
 
-/**
- * Hook simple para saber si el dispositivo tiene conectividad.
- * Se usa para el indicador visual online/offline (HomeScreen) y para
- * decidir cuándo el servicio de sync debe intentar drenar el outbox.
- */
+/** Hook simple para saber si el navegador tiene conectividad. */
 export function useNetworkStatus(): { isOnline: boolean } {
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      setIsOnline(Boolean(state.isConnected && state.isInternetReachable !== false));
-    });
-
-    return () => unsubscribe();
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   return { isOnline };

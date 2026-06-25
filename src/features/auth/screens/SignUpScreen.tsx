@@ -1,38 +1,30 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
-import type { RootStackParamList } from '../../../app/navigation/types';
+import { Alert, Button, Form, Input, Typography } from 'antd';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { signUp } from '../../../services/supabase/auth';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
+interface FormValues {
+  email: string;
+  password: string;
+}
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-export function SignUpScreen({ navigation }: Props) {
-  const theme = useTheme();
-
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export function SignUpScreen() {
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
-  const isValid = EMAIL_REGEX.test(email.trim()) && password.length >= 6;
-
-  const handleSubmit = async () => {
-    if (!isValid) return;
+  const handleSubmit = async (values: FormValues) => {
     setError('');
     setIsSubmitting(true);
     try {
-      const { needsEmailConfirmation } = await signUp(email.trim(), password);
+      const { needsEmailConfirmation } = await signUp(values.email.trim(), values.password);
       if (needsEmailConfirmation) {
         setNeedsConfirmation(true);
       }
-      // Si hay sesión inmediata, el listener de onAuthStateChange en App.tsx
+      // Si hay sesión inmediata, el listener de onAuthStateChange en main.tsx
       // se encarga de navegar a ProfileSetup automáticamente.
-    } catch (err) {
+    } catch {
       setError('No pudimos crear tu cuenta. Intenta con otro correo.');
     } finally {
       setIsSubmitting(false);
@@ -41,102 +33,58 @@ export function SignUpScreen({ navigation }: Props) {
 
   if (needsConfirmation) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Text variant="headlineSmall" style={styles.title}>
-            Revisa tu correo
-          </Text>
-          <Text variant="bodyMedium" style={styles.confirmText}>
+      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
+          <Typography.Title level={3}>Revisa tu correo</Typography.Title>
+          <Typography.Paragraph type="secondary">
             Revisa tu correo para confirmar tu cuenta y luego inicia sesión.
-          </Text>
-          <Button mode="contained" onPress={() => navigation.navigate('Login')} style={styles.submitButton}>
+          </Typography.Paragraph>
+          <Button type="primary" block onClick={() => navigate('/login')} style={{ height: 48 }}>
             Ir a iniciar sesión
           </Button>
-        </ScrollView>
-      </SafeAreaView>
+        </div>
+      </div>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <Text variant="headlineSmall" style={styles.title}>
-            Crea tu cuenta
-          </Text>
+    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 400 }}>
+        <Typography.Title level={3} style={{ marginBottom: 24 }}>
+          Crea tu cuenta
+        </Typography.Title>
 
-          <TextInput
+        <Form layout="vertical" onFinish={handleSubmit} disabled={isSubmitting}>
+          <Form.Item
+            name="email"
             label="Correo"
-            value={email}
-            onChangeText={setEmail}
-            mode="outlined"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={styles.input}
-          />
-
-          <TextInput
-            label="Contraseña"
-            value={password}
-            onChangeText={setPassword}
-            mode="outlined"
-            secureTextEntry
-            style={styles.input}
-          />
-          <HelperText type="info">Mínimo 6 caracteres.</HelperText>
-
-          {error.length > 0 && <HelperText type="error">{error}</HelperText>}
-
-          <Button
-            mode="contained"
-            onPress={handleSubmit}
-            disabled={!isValid || isSubmitting}
-            loading={isSubmitting}
-            style={styles.submitButton}
-            contentStyle={styles.submitButtonContent}
+            rules={[{ required: true, type: 'email', message: 'Ingresa un correo válido' }]}
           >
-            Crear cuenta
-          </Button>
+            <Input autoComplete="email" inputMode="email" />
+          </Form.Item>
 
-          <Button mode="text" onPress={() => navigation.navigate('Login')} style={styles.linkButton}>
-            ¿Ya tienes cuenta? Inicia sesión
-          </Button>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          <Form.Item
+            name="password"
+            label="Contraseña"
+            rules={[{ required: true, min: 6, message: 'Mínimo 6 caracteres' }]}
+            extra="Mínimo 6 caracteres."
+          >
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+
+          {error.length > 0 && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={isSubmitting} style={{ height: 48 }}>
+              Crear cuenta
+            </Button>
+          </Form.Item>
+        </Form>
+
+        <Button type="text" block onClick={() => navigate('/login')} style={{ marginTop: 8 }}>
+          ¿Ya tienes cuenta? Inicia sesión
+        </Button>
+      </div>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  title: {
-    marginBottom: 24,
-    fontWeight: '700',
-  },
-  confirmText: {
-    marginBottom: 24,
-    opacity: 0.8,
-  },
-  input: {
-    marginBottom: 8,
-  },
-  submitButton: {
-    marginTop: 16,
-  },
-  submitButtonContent: {
-    height: 48,
-  },
-  linkButton: {
-    marginTop: 8,
-  },
-});

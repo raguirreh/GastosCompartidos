@@ -1,20 +1,19 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Chip, HelperText, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
-import type { GroupsStackParamList } from '../../../app/navigation/types';
+import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Alert, Button, Input, Segmented, Select, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
-import type { ExpenseCategory, SplitMode } from '../../../shared/types';
 import { mockCategories } from '../../../shared/constants/categories';
+import type { ExpenseCategory, SplitMode } from '../../../shared/types';
 import { formatDate } from '../../../shared/utils/format';
-import { useExpensesStore, useGroupsStore, useProfilesStore, useUserStore } from '../../../store';
+import { useExpensesStore } from '../../../store/expensesStore';
+import { useGroupsStore } from '../../../store/groupsStore';
+import { useProfilesStore } from '../../../store/profilesStore';
+import { useUserStore } from '../../../store/userStore';
 
-type Props = NativeStackScreenProps<GroupsStackParamList, 'AddExpense'>;
-
-export function AddExpenseScreen({ route, navigation }: Props) {
-  const theme = useTheme();
-  const { groupId } = route.params;
+export function AddExpenseScreen() {
+  const navigate = useNavigate();
+  const { groupId = '' } = useParams<{ groupId: string }>();
   const currentUser = useUserStore((s) => s.currentUser);
   const addExpense = useExpensesStore((s) => s.addExpense);
   const getGroupById = useGroupsStore((s) => s.getGroupById);
@@ -43,17 +42,12 @@ export function AddExpenseScreen({ route, navigation }: Props) {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [paidBy, setPaidBy] = useState(currentUser?.uid ?? members[0]?.uid ?? '');
-  const [payerMenuVisible, setPayerMenuVisible] = useState(false);
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
   const [category, setCategory] = useState<ExpenseCategory>('food');
   const [notes, setNotes] = useState('');
   const [participantIds, setParticipantIds] = useState<string[]>(group?.memberIds ?? []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (group) setParticipantIds(group.memberIds);
-  }, [group]);
 
   useEffect(() => {
     if (group) setParticipantIds(group.memberIds);
@@ -87,217 +81,150 @@ export function AddExpenseScreen({ route, navigation }: Props) {
         splitMode,
         participantIds,
       });
-      navigation.goBack();
-    } catch (err) {
+      navigate(-1);
+    } catch {
       setError('No pudimos agregar el gasto. Inténtalo de nuevo.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const payer = profiles[paidBy];
   const canSubmit = description.trim().length > 0 && numericAmount > 0 && participantIds.length > 0 && Boolean(group);
 
   if (!group) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
-        <Text style={styles.helperText}>No pudimos encontrar este grupo.</Text>
-      </SafeAreaView>
+      <div style={{ padding: 16 }}>
+        <Typography.Text type="secondary">No pudimos encontrar este grupo.</Typography.Text>
+      </div>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" role="main">
-          <Text variant="headlineSmall" style={styles.title} accessibilityRole="header" aria-level={1}>
-            Agregar gasto
-          </Text>
+    <div style={{ padding: 16, paddingBottom: 48 }} role="main">
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+        <Button type="text" icon={<ArrowLeftOutlined />} aria-label="Volver" onClick={() => navigate(-1)} />
+        <Typography.Title level={1} style={{ fontSize: 20, margin: 0 }}>
+          Agregar gasto
+        </Typography.Title>
+      </div>
 
-          <TextInput
-            label="Descripción"
-            value={description}
-            onChangeText={setDescription}
-            mode="outlined"
-            style={styles.input}
-            placeholder="Ej. Almuerzo en el centro"
-          />
+      <Input
+        placeholder="Ej. Almuerzo en el centro"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        style={{ marginBottom: 16 }}
+        size="large"
+      />
 
-          <TextInput
-            label={`Monto (${group.currency})`}
-            value={amount}
-            onChangeText={setAmount}
-            mode="outlined"
-            keyboardType="decimal-pad"
-            style={styles.input}
-            left={<TextInput.Affix text={group.currency} />}
-          />
+      <Input
+        addonBefore={group.currency}
+        placeholder="Monto"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        inputMode="decimal"
+        style={{ marginBottom: 16 }}
+        size="large"
+      />
 
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            ¿Quién pagó?
-          </Text>
-          <Menu
-            visible={payerMenuVisible}
-            onDismiss={() => setPayerMenuVisible(false)}
-            anchor={
-              <Button
-                mode="outlined"
-                onPress={() => setPayerMenuVisible(true)}
-                style={styles.payerButton}
-                icon={() => (payer ? <Avatar emoji={payer.emoji} color={payer.avatarColor} size={24} /> : undefined)}
-              >
-                {payer?.name ?? 'Selecciona'}
-              </Button>
-            }
-          >
-            {members.map((member) => (
-              <Menu.Item
-                key={member.uid}
-                title={member.name}
-                onPress={() => {
-                  setPaidBy(member.uid);
-                  setPayerMenuVisible(false);
-                }}
-              />
-            ))}
-          </Menu>
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        ¿Quién pagó?
+      </Typography.Text>
+      <Select
+        value={paidBy || undefined}
+        onChange={(value) => setPaidBy(value)}
+        style={{ width: '100%', marginBottom: 16 }}
+        placeholder="Selecciona"
+        options={members.map((member) => ({
+          value: member.uid,
+          label: (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Avatar emoji={member.emoji} color={member.avatarColor} size={20} />
+              {member.name}
+            </div>
+          ),
+        }))}
+      />
 
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Dividir entre
-          </Text>
-          <View style={styles.chipRow}>
-            {members.map((member) => (
-              <Chip
-                key={member.uid}
-                selected={participantIds.includes(member.uid)}
-                onPress={() => toggleParticipant(member.uid)}
-                style={styles.chip}
-              >
-                {member.emoji} {member.name}
-              </Chip>
-            ))}
-          </View>
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Dividir entre
+      </Typography.Text>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        {members.map((member) => {
+          const selected = participantIds.includes(member.uid);
+          return (
+            <Button
+              key={member.uid}
+              type={selected ? 'primary' : 'default'}
+              shape="round"
+              size="small"
+              onClick={() => toggleParticipant(member.uid)}
+            >
+              {member.emoji} {member.name}
+            </Button>
+          );
+        })}
+      </div>
 
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Modo de división
-          </Text>
-          <SegmentedButtons
-            value={splitMode}
-            onValueChange={(value) => setSplitMode(value as SplitMode)}
-            style={styles.segmented}
-            buttons={[
-              { value: 'equal', label: 'Igual' },
-              { value: 'percentage', label: '%' },
-              { value: 'exact', label: 'Exacto' },
-              { value: 'shares', label: 'Shares' },
-            ]}
-          />
-          {splitMode !== 'equal' && (
-            <Text variant="bodySmall" style={styles.helperText}>
-              El detalle por persona para este modo se ajusta luego desde el detalle del gasto. Por ahora se aplica división igual como base.
-            </Text>
-          )}
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Modo de división
+      </Typography.Text>
+      <Segmented
+        value={splitMode}
+        onChange={(value) => setSplitMode(value as SplitMode)}
+        block
+        style={{ marginBottom: 8 }}
+        options={[
+          { value: 'equal', label: 'Igual' },
+          { value: 'percentage', label: '%' },
+          { value: 'exact', label: 'Exacto' },
+          { value: 'shares', label: 'Shares' },
+        ]}
+      />
+      {splitMode !== 'equal' && (
+        <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 16 }}>
+          El detalle por persona para este modo se ajusta luego desde el detalle del gasto. Por ahora se aplica
+          división igual como base.
+        </Typography.Text>
+      )}
 
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Categoría
-          </Text>
-          <View style={styles.chipRow}>
-            {mockCategories.map((cat) => (
-              <Chip
-                key={cat.value}
-                selected={category === cat.value}
-                onPress={() => setCategory(cat.value)}
-                style={styles.chip}
-                icon={cat.icon}
-              >
-                {cat.label}
-              </Chip>
-            ))}
-          </View>
-
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Fecha
-          </Text>
-          <Text variant="bodyMedium" style={styles.dateText}>
-            {formatDate(Date.now())}
-          </Text>
-
-          <TextInput
-            label="Notas (opcional)"
-            value={notes}
-            onChangeText={setNotes}
-            mode="outlined"
-            multiline
-            numberOfLines={3}
-            style={styles.input}
-          />
-
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Categoría
+      </Typography.Text>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        {mockCategories.map((cat) => (
           <Button
-            mode="contained"
-            onPress={handleSubmit}
-            disabled={!canSubmit || isSubmitting}
-            loading={isSubmitting}
-            style={styles.submitButton}
-            contentStyle={styles.submitButtonContent}
+            key={cat.value}
+            type={category === cat.value ? 'primary' : 'default'}
+            shape="round"
+            size="small"
+            onClick={() => setCategory(cat.value)}
           >
-            Agregar gasto
+            {cat.label}
           </Button>
-          {error.length > 0 && <HelperText type="error">{error}</HelperText>}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        ))}
+      </div>
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Fecha
+      </Typography.Text>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+        {formatDate(Date.now())}
+      </Typography.Text>
+
+      <Input.TextArea
+        placeholder="Notas (opcional)"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        rows={3}
+        style={{ marginBottom: 16 }}
+      />
+
+      <Button type="primary" block size="large" onClick={handleSubmit} disabled={!canSubmit} loading={isSubmitting}>
+        Agregar gasto
+      </Button>
+      {error.length > 0 && (
+        <Alert type="error" message={error} style={{ marginTop: 16 }} />
+      )}
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 48,
-  },
-  title: {
-    marginBottom: 24,
-    fontWeight: '700',
-  },
-  input: {
-    marginBottom: 16,
-  },
-  sectionLabel: {
-    marginBottom: 8,
-  },
-  payerButton: {
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  chip: {
-    marginBottom: 4,
-  },
-  segmented: {
-    marginBottom: 8,
-  },
-  helperText: {
-    opacity: 0.6,
-    marginBottom: 16,
-  },
-  dateText: {
-    marginBottom: 16,
-    opacity: 0.8,
-  },
-  submitButton: {
-    marginTop: 16,
-  },
-  submitButtonContent: {
-    height: 48,
-  },
-});

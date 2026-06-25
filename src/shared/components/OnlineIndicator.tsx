@@ -1,33 +1,14 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 /** Indicador visual de estado de conexión (online/offline), usado en HomeScreen. */
 export function OnlineIndicator() {
   const { isOnline } = useNetworkStatus();
-  const theme = useTheme();
-  const color = isOnline ? theme.colors.tertiary : theme.colors.error;
+  const color = isOnline ? 'var(--ant-color-success, #52c41a)' : 'var(--ant-color-error, #ff4d4f)';
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.dot, { backgroundColor: color }]} />
-      <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-        {isOnline ? 'En línea' : 'Sin conexión'}
-      </Text>
-    </View>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+      <span style={{ fontSize: 12, opacity: 0.7 }}>{isOnline ? 'En línea' : 'Sin conexión'}</span>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-});

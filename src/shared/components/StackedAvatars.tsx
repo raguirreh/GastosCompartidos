@@ -1,5 +1,3 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
 import { Avatar } from './Avatar';
 
 interface StackedAvatarsProps {
@@ -14,29 +12,24 @@ export function StackedAvatars({ members, size = 28, max = 4 }: StackedAvatarsPr
   const remaining = members.length - visible.length;
 
   return (
-    <View style={styles.row}>
+    <div style={{ display: 'flex', alignItems: 'center' }}>
       {visible.map((member, index) => (
-        <View key={index} style={[styles.avatarWrapper, { marginLeft: index === 0 ? 0 : -size * 0.3 }]}>
+        <div
+          key={index}
+          style={{
+            marginLeft: index === 0 ? 0 : -size * 0.3,
+            border: '2px solid #fff',
+            borderRadius: '100%',
+          }}
+        >
           <Avatar emoji={member.emoji} color={member.color} size={size} />
-        </View>
+        </div>
       ))}
       {remaining > 0 && (
-        <View style={[styles.avatarWrapper, { marginLeft: -size * 0.3 }]}>
+        <div style={{ marginLeft: -size * 0.3, border: '2px solid #fff', borderRadius: '100%' }}>
           <Avatar label={`+${remaining}`} color="#D9E2EC" size={size} />
-        </View>
+        </div>
       )}
-    </View>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarWrapper: {
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    borderRadius: 100,
-  },
-});

@@ -1,12 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card, Dialog, Portal, Text, useTheme } from 'react-native-paper';
+import { Button, Card, Modal, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
 import { Avatar } from '../../../shared/components/Avatar';
 import { buildWhatsAppPaymentRequestUrl, buildWhatsAppWebPaymentRequestUrl } from '../../../shared/utils/invite';
 import { formatMoney, getCurrencySymbol } from '../../../shared/utils/format';
 import { openWhatsApp } from '../../../shared/utils/share';
-import { useBalancesStore, useExpensesStore, useGroupsStore, useProfilesStore, useUserStore } from '../../../store';
+import { useBalancesStore } from '../../../store/balancesStore';
+import { useExpensesStore } from '../../../store/expensesStore';
+import { useGroupsStore } from '../../../store/groupsStore';
+import { useProfilesStore } from '../../../store/profilesStore';
+import { useUserStore } from '../../../store/userStore';
 import type { Settlement } from '../../../shared/utils/debtSimplification';
 
 interface SettlementEntry {
@@ -16,7 +18,6 @@ interface SettlementEntry {
 }
 
 export function BalancesScreen() {
-  const theme = useTheme();
   const currentUser = useUserStore((s) => s.currentUser);
   const groups = useGroupsStore((s) => s.groups);
   const fetchGroups = useGroupsStore((s) => s.fetchGroups);
@@ -121,160 +122,87 @@ export function BalancesScreen() {
     if (!other || !group) return null;
 
     return (
-      <Card key={`${entry.groupId}-${entry.otherUserId}`} style={styles.entryCard} mode="outlined">
-        <Card.Content style={styles.entryRow}>
+      <Card key={`${entry.groupId}-${entry.otherUserId}`} size="small" style={{ marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
           <Avatar emoji={other.emoji} color={other.avatarColor} size={40} />
-          <View style={styles.entryInfo}>
-            <Text variant="bodyMedium">{other.name}</Text>
-            <Text variant="bodySmall" style={styles.entrySubtext}>
-              {group.name}
-            </Text>
-          </View>
-          <Text
-            variant="titleSmall"
-            style={{ color: type === 'owed' ? theme.colors.tertiary : theme.colors.error }}
+          <div style={{ flex: 1 }}>
+            <div>{other.name}</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>{group.name}</div>
+          </div>
+          <Typography.Text
+            strong
+            style={{
+              color: type === 'owed' ? 'var(--ant-color-success, #52c41a)' : 'var(--ant-color-error, #ff4d4f)',
+            }}
           >
-            <Text aria-hidden importantForAccessibility="no">{type === 'owed' ? '↑ ' : '↓ '}</Text>
+            <span aria-hidden="true">{type === 'owed' ? '↑ ' : '↓ '}</span>
             {formatMoney(Math.abs(entry.amount), group.currency)} {type === 'owed' ? '(a tu favor)' : '(debes)'}
-          </Text>
-        </Card.Content>
-        <Card.Actions>
-          {type === 'owed' ? (
-            <Button
-              mode="text"
-              onPress={() => {
-                setDialogEntry(entry);
-                setDialogAction('request');
-              }}
-            >
-              Solicitar pago
-            </Button>
-          ) : (
-            <Button
-              mode="text"
-              onPress={() => {
-                setDialogEntry(entry);
-                setDialogAction('register');
-              }}
-            >
-              Registrar pago
-            </Button>
-          )}
-        </Card.Actions>
+          </Typography.Text>
+        </div>
+        <Button
+          type="text"
+          size="small"
+          onClick={() => {
+            setDialogEntry(entry);
+            setDialogAction(type === 'owed' ? 'request' : 'register');
+          }}
+        >
+          {type === 'owed' ? 'Solicitar pago' : 'Registrar pago'}
+        </Button>
       </Card>
     );
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} role="main">
-        <Text variant="headlineSmall" style={styles.title} accessibilityRole="header" aria-level={1}>
-          Saldos
-        </Text>
+    <div style={{ padding: 16, paddingBottom: 32 }} role="main">
+      <Typography.Title level={1} style={{ fontSize: 22, marginBottom: 16 }}>
+        Saldos
+      </Typography.Title>
 
-        <Card style={styles.totalCard} mode="contained">
-          <Card.Content>
-            <Text variant="labelLarge" style={styles.totalLabel}>
-              Saldo neto total
-            </Text>
-            <Text
-              variant="displaySmall"
-              style={{
-                color: netTotal >= 0 ? theme.colors.tertiary : theme.colors.error,
-                fontWeight: '700',
-              }}
-            >
-              <Text aria-hidden importantForAccessibility="no">{netTotal >= 0 ? '↑ ' : '↓ '}</Text>
-              {formatMoney(netTotal, 'PEN')} {netTotal >= 0 ? '(a tu favor)' : '(debes)'}
-            </Text>
-          </Card.Content>
-        </Card>
+      <Card style={{ marginBottom: 24 }}>
+        <Typography.Text type="secondary">Saldo neto total</Typography.Text>
+        <Typography.Title
+          level={2}
+          style={{ color: netTotal >= 0 ? 'var(--ant-color-success, #52c41a)' : 'var(--ant-color-error, #ff4d4f)' }}
+        >
+          <span aria-hidden="true">{netTotal >= 0 ? '↑ ' : '↓ '}</span>
+          {formatMoney(netTotal, 'PEN')} {netTotal >= 0 ? '(a tu favor)' : '(debes)'}
+        </Typography.Title>
+      </Card>
 
-        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
-          Te deben
-        </Text>
-        {owedToMe.length === 0 && <Text style={styles.emptyText}>Nadie te debe dinero ahora.</Text>}
-        {owedToMe.map((entry) => renderEntry(entry, 'owed'))}
+      <Typography.Title level={2} style={{ fontSize: 16, marginBottom: 12 }}>
+        Te deben
+      </Typography.Title>
+      {owedToMe.length === 0 && <Typography.Text type="secondary">Nadie te debe dinero ahora.</Typography.Text>}
+      {owedToMe.map((entry) => renderEntry(entry, 'owed'))}
 
-        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
-          Debes
-        </Text>
-        {owedByMe.length === 0 && <Text style={styles.emptyText}>No le debes dinero a nadie ahora.</Text>}
-        {owedByMe.map((entry) => renderEntry(entry, 'owe'))}
-      </ScrollView>
+      <Typography.Title level={2} style={{ fontSize: 16, marginBottom: 12, marginTop: 16 }}>
+        Debes
+      </Typography.Title>
+      {owedByMe.length === 0 && <Typography.Text type="secondary">No le debes dinero a nadie ahora.</Typography.Text>}
+      {owedByMe.map((entry) => renderEntry(entry, 'owe'))}
 
-      <Portal>
-        <Dialog visible={dialogEntry !== null} onDismiss={closeDialog}>
-          <Dialog.Title>
-            {dialogAction === 'request' ? 'Solicitar pago' : 'Registrar pago'}
-          </Dialog.Title>
-          <Dialog.Content>
-            <Text variant="bodyMedium">
-              {dialogAction === 'request'
-                ? `Se abrirá WhatsApp para recordarle a ${profiles[dialogEntry?.otherUserId ?? '']?.name} que te debe dinero.`
-                : `Esto marcará la deuda con ${profiles[dialogEntry?.otherUserId ?? '']?.name} como pagada.`}
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeDialog}>Cancelar</Button>
-            <Button
-              onPress={() => {
-                if (!dialogEntry) return;
-                if (dialogAction === 'request') {
-                  handleRequestPayment(dialogEntry);
-                } else {
-                  handleRegisterPayment();
-                }
-              }}
-            >
-              Confirmar
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    </SafeAreaView>
+      <Modal
+        open={dialogEntry !== null}
+        onCancel={closeDialog}
+        title={dialogAction === 'request' ? 'Solicitar pago' : 'Registrar pago'}
+        onOk={() => {
+          if (!dialogEntry) return;
+          if (dialogAction === 'request') {
+            handleRequestPayment(dialogEntry);
+          } else {
+            handleRegisterPayment();
+          }
+        }}
+        okText="Confirmar"
+        cancelText="Cancelar"
+      >
+        <Typography.Text>
+          {dialogAction === 'request'
+            ? `Se abrirá WhatsApp para recordarle a ${profiles[dialogEntry?.otherUserId ?? '']?.name} que te debe dinero.`
+            : `Esto marcará la deuda con ${profiles[dialogEntry?.otherUserId ?? '']?.name} como pagada.`}
+        </Typography.Text>
+      </Modal>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  title: {
-    marginBottom: 16,
-    fontWeight: '700',
-  },
-  totalCard: {
-    marginBottom: 24,
-  },
-  totalLabel: {
-    opacity: 0.7,
-    marginBottom: 4,
-  },
-  sectionTitle: {
-    marginBottom: 12,
-    fontWeight: '700',
-  },
-  emptyText: {
-    opacity: 0.6,
-    marginBottom: 16,
-  },
-  entryCard: {
-    marginBottom: 8,
-  },
-  entryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  entryInfo: {
-    flex: 1,
-  },
-  entrySubtext: {
-    opacity: 0.6,
-  },
-});

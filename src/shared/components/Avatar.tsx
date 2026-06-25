@@ -1,7 +1,3 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
-
 interface AvatarProps {
   emoji?: string;
   label?: string;
@@ -14,20 +10,19 @@ export function Avatar({ emoji, label, color, size = 40 }: AvatarProps) {
   const content = emoji ?? label ?? '?';
 
   return (
-    <View
-      style={[
-        styles.container,
-        { width: size, height: size, borderRadius: size / 2, backgroundColor: color },
-      ]}
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: size * 0.45,
+      }}
     >
-      <Text style={{ fontSize: size * 0.45 }}>{content}</Text>
-    </View>
+      {content}
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

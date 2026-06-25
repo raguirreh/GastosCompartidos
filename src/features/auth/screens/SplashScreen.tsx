@@ -1,26 +1,14 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
-import { Text, useTheme } from 'react-native-paper';
-import type { RootStackParamList } from '../../../app/navigation/types';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../store/authStore';
-import { useUserStore } from '../../../store';
+import { useUserStore } from '../../../store/userStore';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Splash'>;
-
-export function SplashScreen({ navigation }: Props) {
-  const theme = useTheme();
-  const opacity = useSharedValue(0);
-  const scale = useSharedValue(0.85);
+export function SplashScreen() {
+  const navigate = useNavigate();
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    opacity.value = withTiming(1, { duration: 600 });
-    scale.value = withTiming(1, { duration: 600 });
+    requestAnimationFrame(() => setVisible(true));
 
     const minDelay = new Promise<void>((resolve) => setTimeout(resolve, 1100));
 
@@ -41,17 +29,17 @@ export function SplashScreen({ navigation }: Props) {
       if (cancelled) return;
       const currentSession = useAuthStore.getState().session;
       if (!currentSession) {
-        navigation.replace('Login');
+        navigate('/login', { replace: true });
         return;
       }
       if (!useUserStore.getState().hasCompletedOnboarding) {
-        navigation.replace('Onboarding');
+        navigate('/onboarding', { replace: true });
         return;
       }
       if (!useUserStore.getState().currentUser) {
-        navigation.replace('ProfileSetup');
+        navigate('/profile-setup', { replace: true });
       } else {
-        navigation.replace('Main');
+        navigate('/app/home', { replace: true });
       }
     });
 
@@ -61,46 +49,28 @@ export function SplashScreen({ navigation }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      <Animated.View style={[styles.content, animatedStyle]}>
-        <Text style={styles.emoji}>💸</Text>
-        <Text variant="headlineMedium" style={styles.title}>
-          Gastos Compartidos
-        </Text>
-        <Text variant="bodyMedium" style={styles.subtitle}>
-          Divide gastos, no amistades
-        </Text>
-      </Animated.View>
-    </View>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        background: 'var(--ant-color-primary, #1677ff)',
+      }}
+    >
+      <div
+        style={{
+          textAlign: 'center',
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'scale(1)' : 'scale(0.85)',
+          transition: 'opacity 600ms ease, transform 600ms ease',
+        }}
+      >
+        <div style={{ fontSize: 64, marginBottom: 16 }}>💸</div>
+        <div style={{ color: '#fff', fontWeight: 700, fontSize: 24 }}>Gastos Compartidos</div>
+        <div style={{ color: '#fff', opacity: 0.85, marginTop: 4 }}>Divide gastos, no amistades</div>
+      </div>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  content: {
-    alignItems: 'center',
-  },
-  emoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#FFFFFF',
-    opacity: 0.85,
-    marginTop: 4,
-  },
-});

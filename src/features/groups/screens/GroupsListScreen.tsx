@@ -1,18 +1,17 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useMemo } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, FAB, Text, useTheme } from 'react-native-paper';
-import type { GroupsStackParamList } from '../../../app/navigation/types';
+import { PlusOutlined } from '@ant-design/icons';
+import { Button, Card, Typography } from 'antd';
+import { useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { StackedAvatars } from '../../../shared/components/StackedAvatars';
 import { computeGroupSettlements } from '../../../shared/utils/debtSimplification';
 import { formatMoney } from '../../../shared/utils/format';
-import { useExpensesStore, useGroupsStore, useProfilesStore, useUserStore } from '../../../store';
+import { useExpensesStore } from '../../../store/expensesStore';
+import { useGroupsStore } from '../../../store/groupsStore';
+import { useProfilesStore } from '../../../store/profilesStore';
+import { useUserStore } from '../../../store/userStore';
 
-type Props = NativeStackScreenProps<GroupsStackParamList, 'GroupsList'>;
-
-export function GroupsListScreen({ navigation }: Props) {
-  const theme = useTheme();
+export function GroupsListScreen() {
+  const navigate = useNavigate();
   const currentUser = useUserStore((s) => s.currentUser);
   const groups = useGroupsStore((s) => s.groups);
   const fetchGroups = useGroupsStore((s) => s.fetchGroups);
@@ -67,123 +66,76 @@ export function GroupsListScreen({ navigation }: Props) {
   }, [groups, expensesByGroup, currentUser]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <View style={styles.header} role="banner">
-        <Text variant="headlineSmall" style={styles.title} accessibilityRole="header" aria-level={1}>
+    <div style={{ padding: 16, paddingBottom: 96 }}>
+      <div role="banner" style={{ paddingBottom: 8 }}>
+        <Typography.Title level={1} style={{ fontSize: 22 }}>
           Grupos
-        </Text>
-      </View>
+        </Typography.Title>
+      </div>
 
-      <FlatList
-        role="main"
-        data={groups}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>Todavía no tienes grupos. Crea uno para empezar.</Text>
-        }
-        renderItem={({ item }) => {
-          const balance = groupBalances[item.id] ?? 0;
-          const members = item.memberIds
+      <div role="main">
+        {groups.length === 0 && (
+          <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 48 }}>
+            Todavía no tienes grupos. Crea uno para empezar.
+          </Typography.Text>
+        )}
+
+        {groups.map((group) => {
+          const balance = groupBalances[group.id] ?? 0;
+          const members = group.memberIds
             .map((id) => profiles[id])
             .filter((u): u is NonNullable<typeof u> => Boolean(u))
             .map((u) => ({ emoji: u.emoji, color: u.avatarColor }));
 
           return (
             <Card
-              style={styles.groupCard}
-              onPress={() => navigation.navigate('GroupDetail', { groupId: item.id })}
-              accessibilityRole="button"
-              accessibilityLabel={item.name}
+              key={group.id}
+              hoverable
+              onClick={() => navigate(`/app/groups/${group.id}`)}
+              role="button"
+              aria-label={group.name}
+              style={{ marginBottom: 12 }}
             >
-              <Card.Content style={styles.groupCardContent}>
-                <Text style={styles.groupEmoji} aria-hidden importantForAccessibility="no">{item.emoji}</Text>
-                <View style={styles.groupInfo}>
-                  <Text variant="titleMedium" numberOfLines={1}>
-                    {item.name}
-                  </Text>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontSize: 32 }} aria-hidden="true">
+                  {group.emoji}
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
+                  <Typography.Text strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {group.name}
+                  </Typography.Text>
                   <StackedAvatars members={members} />
-                </View>
-                <View style={styles.groupBalance}>
-                  <Text
-                    variant="titleSmall"
-                    style={{
-                      color:
-                        balance === 0
-                          ? theme.colors.onSurfaceVariant
-                          : balance > 0
-                            ? theme.colors.tertiary
-                            : theme.colors.error,
-                    }}
-                  >
-                    {balance === 0 ? (
-                      'Saldado'
-                    ) : (
-                      <>
-                        <Text aria-hidden importantForAccessibility="no">{balance > 0 ? '↑ ' : '↓ '}</Text>
-                        {formatMoney(balance, item.currency)} {balance > 0 ? '(a tu favor)' : '(debes)'}
-                      </>
-                    )}
-                  </Text>
-                </View>
-              </Card.Content>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  {balance === 0 ? (
+                    <Typography.Text type="secondary">Saldado</Typography.Text>
+                  ) : (
+                    <Typography.Text
+                      strong
+                      style={{
+                        color: balance > 0 ? 'var(--ant-color-success, #52c41a)' : 'var(--ant-color-error, #ff4d4f)',
+                      }}
+                    >
+                      <span aria-hidden="true">{balance > 0 ? '↑ ' : '↓ '}</span>
+                      {formatMoney(balance, group.currency)} {balance > 0 ? '(a tu favor)' : '(debes)'}
+                    </Typography.Text>
+                  )}
+                </div>
+              </div>
             </Card>
           );
-        }}
-      />
+        })}
+      </div>
 
-      <FAB
-        icon="plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        color="#FFFFFF"
-        onPress={() => navigation.navigate('CreateGroup')}
+      <Button
+        type="primary"
+        shape="circle"
+        icon={<PlusOutlined />}
+        size="large"
+        aria-label="Crear grupo"
+        onClick={() => navigate('/app/groups/new')}
+        style={{ position: 'fixed', right: 16, bottom: 72, width: 56, height: 56 }}
       />
-    </SafeAreaView>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  title: {
-    fontWeight: '700',
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 96,
-  },
-  emptyText: {
-    textAlign: 'center',
-    opacity: 0.6,
-    marginTop: 48,
-  },
-  groupCard: {
-    marginBottom: 12,
-  },
-  groupCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  groupEmoji: {
-    fontSize: 32,
-  },
-  groupInfo: {
-    flex: 1,
-    gap: 6,
-  },
-  groupBalance: {
-    alignItems: 'flex-end',
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-  },
-});

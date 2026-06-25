@@ -1,23 +1,21 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, FAB, IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
-import type { GroupsStackParamList } from '../../../app/navigation/types';
+import { ArrowLeftOutlined, PlusOutlined, UserAddOutlined } from '@ant-design/icons';
+import { Button, Card, Segmented, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
 import { InviteModal } from '../../../shared/components/InviteModal';
 import { mockCategories } from '../../../shared/constants/categories';
 import { computeGroupSettlements } from '../../../shared/utils/debtSimplification';
 import { formatDate, formatMoney } from '../../../shared/utils/format';
-import { useExpensesStore, useGroupsStore, useProfilesStore } from '../../../store';
-
-type Props = NativeStackScreenProps<GroupsStackParamList, 'GroupDetail'>;
+import { useExpensesStore } from '../../../store/expensesStore';
+import { useGroupsStore } from '../../../store/groupsStore';
+import { useProfilesStore } from '../../../store/profilesStore';
 
 type TabKey = 'expenses' | 'balances' | 'members';
 
-export function GroupDetailScreen({ route, navigation }: Props) {
-  const theme = useTheme();
-  const { groupId } = route.params;
+export function GroupDetailScreen() {
+  const navigate = useNavigate();
+  const { groupId = '' } = useParams<{ groupId: string }>();
   const [tab, setTab] = useState<TabKey>('expenses');
   const [inviteVisible, setInviteVisible] = useState(false);
 
@@ -59,29 +57,39 @@ export function GroupDetailScreen({ route, navigation }: Props) {
 
   if (!group) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-        <Text style={styles.emptyText}>No pudimos encontrar este grupo.</Text>
-      </SafeAreaView>
+      <div style={{ padding: 16 }}>
+        <Typography.Text type="secondary">No pudimos encontrar este grupo.</Typography.Text>
+      </div>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <View style={styles.header} role="banner">
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} accessibilityLabel="Volver" />
-        <View style={styles.headerTitleWrapper}>
-          <Text variant="titleLarge" numberOfLines={1} accessibilityRole="header" aria-level={1} accessibilityLabel={group.name}>
+    <div style={{ padding: 16, paddingBottom: 96 }}>
+      <div role="banner" style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+        <Button type="text" icon={<ArrowLeftOutlined />} aria-label="Volver" onClick={() => navigate(-1)} />
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <Typography.Title
+            level={1}
+            aria-label={group.name}
+            style={{ fontSize: 18, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
             {group.emoji} {group.name}
-          </Text>
-        </View>
-        <IconButton icon="account-plus" onPress={() => setInviteVisible(true)} accessibilityLabel="Invitar miembro" />
-      </View>
+          </Typography.Title>
+        </div>
+        <Button
+          type="text"
+          icon={<UserAddOutlined />}
+          aria-label="Invitar miembro"
+          onClick={() => setInviteVisible(true)}
+        />
+      </div>
 
-      <SegmentedButtons
+      <Segmented
         value={tab}
-        onValueChange={(value) => setTab(value as TabKey)}
-        style={styles.segmented}
-        buttons={[
+        onChange={(value) => setTab(value as TabKey)}
+        block
+        style={{ marginBottom: 16 }}
+        options={[
           { value: 'expenses', label: 'Gastos' },
           { value: 'balances', label: 'Saldos' },
           { value: 'members', label: 'Miembros' },
@@ -89,94 +97,93 @@ export function GroupDetailScreen({ route, navigation }: Props) {
       />
 
       {tab === 'expenses' && (
-        <ScrollView contentContainerStyle={styles.tabContent} role="main">
+        <div role="main">
           {groupExpenses.length === 0 && (
-            <Text style={styles.emptyText}>Todavía no hay gastos en este grupo.</Text>
+            <Typography.Text type="secondary">Todavía no hay gastos en este grupo.</Typography.Text>
           )}
           {groupExpenses.map((expense) => {
             const payer = profiles[expense.paidBy];
             const category = mockCategories.find((c) => c.value === expense.category);
             return (
-              <Card key={expense.id} style={styles.expenseCard} mode="outlined">
-                <Card.Content style={styles.expenseRow}>
+              <Card key={expense.id} size="small" style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   {payer && <Avatar emoji={payer.emoji} color={payer.avatarColor} size={40} />}
-                  <View style={styles.expenseInfo}>
-                    <Text variant="bodyMedium" numberOfLines={1}>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {expense.description}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.expenseSubtext}>
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.6 }}>
                       {payer?.name ?? 'Alguien'} pagó · {category?.label} · {formatDate(expense.date)}
-                    </Text>
-                  </View>
-                  <Text variant="titleSmall">{formatMoney(expense.amount, expense.currency)}</Text>
-                </Card.Content>
+                    </div>
+                  </div>
+                  <Typography.Text strong>{formatMoney(expense.amount, expense.currency)}</Typography.Text>
+                </div>
               </Card>
             );
           })}
-        </ScrollView>
+        </div>
       )}
 
       {tab === 'balances' && (
-        <ScrollView contentContainerStyle={styles.tabContent} role="main">
-          <Text variant="labelLarge" style={styles.sectionLabel} accessibilityRole="header" aria-level={2}>
+        <div role="main">
+          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
             Pagos sugeridos (mínimo de transacciones)
-          </Text>
+          </Typography.Text>
           {settlements.length === 0 && (
-            <Text style={styles.emptyText}>Este grupo está saldado. ¡Buen trabajo!</Text>
+            <Typography.Text type="secondary">Este grupo está saldado. ¡Buen trabajo!</Typography.Text>
           )}
           {settlements.map((settlement, index) => {
             const from = profiles[settlement.fromUserId];
             const to = profiles[settlement.toUserId];
             return (
-              <Card key={index} style={styles.settlementCard} mode="outlined">
-                <Card.Content style={styles.settlementRow}>
+              <Card key={index} size="small" style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   {from && <Avatar emoji={from.emoji} color={from.avatarColor} size={32} />}
-                  <Text variant="bodyMedium" style={styles.settlementText}>
-                    <Text style={{ fontWeight: '700' }}>{from?.name}</Text> le debe a{' '}
-                    <Text style={{ fontWeight: '700' }}>{to?.name}</Text>
-                  </Text>
+                  <div style={{ flex: 1 }}>
+                    <strong>{from?.name}</strong> le debe a <strong>{to?.name}</strong>
+                  </div>
                   {to && <Avatar emoji={to.emoji} color={to.avatarColor} size={32} />}
-                </Card.Content>
-                <Card.Content>
-                  <Text variant="titleMedium" style={{ color: theme.colors.error }}>
-                    <Text aria-hidden importantForAccessibility="no">↓ </Text>
-                    {formatMoney(settlement.amount, group.currency)} (deuda pendiente)
-                  </Text>
-                </Card.Content>
+                </div>
+                <Typography.Text style={{ color: 'var(--ant-color-error, #ff4d4f)' }}>
+                  <span aria-hidden="true">↓ </span>
+                  {formatMoney(settlement.amount, group.currency)} (deuda pendiente)
+                </Typography.Text>
               </Card>
             );
           })}
-        </ScrollView>
+        </div>
       )}
 
       {tab === 'members' && (
-        <ScrollView contentContainerStyle={styles.tabContent} role="main">
+        <div role="main">
           {group.memberIds.map((memberId) => {
             const member = profiles[memberId];
             if (!member) return null;
             return (
-              <Card key={memberId} style={styles.memberCard} mode="outlined">
-                <Card.Content style={styles.memberRow}>
+              <Card key={memberId} size="small" style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <Avatar emoji={member.emoji} color={member.avatarColor} size={40} />
-                  <Text variant="bodyMedium">{member.name}</Text>
+                  <span>{member.name}</span>
                   {memberId === group.createdBy && (
-                    <Text variant="labelSmall" style={styles.adminTag}>
+                    <Typography.Text type="secondary" style={{ marginLeft: 'auto', fontSize: 12 }}>
                       Admin
-                    </Text>
+                    </Typography.Text>
                   )}
-                </Card.Content>
+                </div>
               </Card>
             );
           })}
-        </ScrollView>
+        </div>
       )}
 
-      <FAB
-        icon="plus"
-        label="Gasto"
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        color="#FFFFFF"
-        onPress={() => navigation.navigate('AddExpense', { groupId })}
+      <Button
+        type="primary"
+        shape="circle"
+        icon={<PlusOutlined />}
+        size="large"
+        aria-label="Agregar gasto"
+        onClick={() => navigate(`/app/groups/${groupId}/add-expense`)}
+        style={{ position: 'fixed', right: 16, bottom: 72, width: 56, height: 56 }}
       />
 
       <InviteModal
@@ -185,79 +192,6 @@ export function GroupDetailScreen({ route, navigation }: Props) {
         inviteToken={group.inviteToken}
         groupName={group.name}
       />
-    </SafeAreaView>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  headerTitleWrapper: {
-    flex: 1,
-  },
-  segmented: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-  },
-  tabContent: {
-    padding: 16,
-    paddingBottom: 96,
-  },
-  emptyText: {
-    textAlign: 'center',
-    opacity: 0.6,
-    marginTop: 24,
-  },
-  expenseCard: {
-    marginBottom: 8,
-  },
-  expenseRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  expenseInfo: {
-    flex: 1,
-  },
-  expenseSubtext: {
-    opacity: 0.6,
-  },
-  sectionLabel: {
-    marginBottom: 12,
-    opacity: 0.7,
-  },
-  settlementCard: {
-    marginBottom: 8,
-  },
-  settlementRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  settlementText: {
-    flex: 1,
-  },
-  memberCard: {
-    marginBottom: 8,
-  },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  adminTag: {
-    marginLeft: 'auto',
-    opacity: 0.6,
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-  },
-});
