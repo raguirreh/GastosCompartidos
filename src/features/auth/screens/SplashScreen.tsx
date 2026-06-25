@@ -17,9 +17,6 @@ export function SplashScreen({ navigation }: Props) {
   const theme = useTheme();
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.85);
-  const hasCompletedOnboarding = useUserStore((s) => s.hasCompletedOnboarding);
-  const currentUser = useUserStore((s) => s.currentUser);
-  const isAuthLoading = useAuthStore((s) => s.isAuthLoading);
 
   useEffect(() => {
     opacity.value = withTiming(1, { duration: 600 });
@@ -30,28 +27,28 @@ export function SplashScreen({ navigation }: Props) {
     let cancelled = false;
     const waitForAuth = () =>
       new Promise<void>((resolve) => {
-        if (!isAuthLoading) {
-          resolve();
-          return;
-        }
-        const interval = setInterval(() => {
-          if (!useAuthStore.getState().isAuthLoading) {
-            clearInterval(interval);
+        const check = () => {
+          if (!useAuthStore.getState().isAuthLoading && !useUserStore.getState().isProfileLoading) {
             resolve();
+            return;
           }
-        }, 50);
+          setTimeout(check, 50);
+        };
+        check();
       });
 
     Promise.all([minDelay, waitForAuth()]).then(() => {
       if (cancelled) return;
-      if (!hasCompletedOnboarding) {
-        navigation.replace('Onboarding');
-        return;
-      }
       const currentSession = useAuthStore.getState().session;
       if (!currentSession) {
         navigation.replace('Login');
-      } else if (!currentUser) {
+        return;
+      }
+      if (!useUserStore.getState().hasCompletedOnboarding) {
+        navigation.replace('Onboarding');
+        return;
+      }
+      if (!useUserStore.getState().currentUser) {
         navigation.replace('ProfileSetup');
       } else {
         navigation.replace('Main');

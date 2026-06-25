@@ -4,7 +4,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
 import type { RootStackParamList } from '../../../app/navigation/types';
-import { signInWithPassword } from '../../../services/supabase/auth';
+import { signInWithGoogle, signInWithPassword } from '../../../services/supabase/auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -16,6 +16,7 @@ export function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const isValid = EMAIL_REGEX.test(email.trim()) && password.length >= 6;
@@ -31,6 +32,20 @@ export function LoginScreen({ navigation }: Props) {
       setError('No pudimos iniciar tu sesión. Revisa tu correo y contraseña.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setIsGoogleSubmitting(true);
+    try {
+      await signInWithGoogle();
+      // En web esto redirige a Google; el listener de onAuthStateChange en
+      // App.tsx se encarga del resto al volver.
+    } catch (err) {
+      setError('No pudimos iniciar sesión con Google. Inténtalo de nuevo.');
+    } finally {
+      setIsGoogleSubmitting(false);
     }
   };
 
@@ -77,6 +92,18 @@ export function LoginScreen({ navigation }: Props) {
           <Button mode="text" onPress={() => navigation.navigate('SignUp')} style={styles.linkButton}>
             ¿No tienes cuenta? Crea una
           </Button>
+
+          <Button
+            mode="outlined"
+            icon="google"
+            onPress={handleGoogleSignIn}
+            disabled={isSubmitting || isGoogleSubmitting}
+            loading={isGoogleSubmitting}
+            style={styles.googleButton}
+            contentStyle={styles.submitButtonContent}
+          >
+            Continuar con Google
+          </Button>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -110,5 +137,8 @@ const styles = StyleSheet.create({
   },
   linkButton: {
     marginTop: 8,
+  },
+  googleButton: {
+    marginTop: 16,
   },
 });

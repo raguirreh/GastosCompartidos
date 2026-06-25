@@ -34,6 +34,7 @@ export default function App() {
   const setAuthLoading = useAuthStore((s) => s.setAuthLoading);
   const setCurrentUser = useUserStore((s) => s.setCurrentUser);
   const clearUser = useUserStore((s) => s.clearUser);
+  const setProfileLoading = useUserStore((s) => s.setProfileLoading);
 
   // Inicialización de la base de datos local (fuente de verdad offline-first
   // en mobile, no disponible en web) y suscripción al estado de auth real de
@@ -56,12 +57,15 @@ export default function App() {
       .then(async ({ data }) => {
         setSession(data.session);
         if (data.session) {
+          setProfileLoading(true);
           try {
             const profile = await fetchProfile(data.session.user.id);
             if (profile) setCurrentUser(profile);
           } catch {
             // Si falla la carga del perfil, la pantalla de ProfileSetup se
             // encargará de pedirlo de nuevo.
+          } finally {
+            setProfileLoading(false);
           }
         }
       })
@@ -72,12 +76,16 @@ export default function App() {
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
+        setProfileLoading(true);
         fetchProfile(session.user.id)
           .then((profile) => {
             if (profile) setCurrentUser(profile);
           })
           .catch(() => {
             // El perfil podría no existir todavía (cuenta recién creada).
+          })
+          .finally(() => {
+            setProfileLoading(false);
           });
       } else {
         clearUser();

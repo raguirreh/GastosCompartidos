@@ -30,6 +30,20 @@ export async function signInWithPassword(email: string, password: string): Promi
   return data.user?.id ?? null;
 }
 
+export async function signInWithGoogle(): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const redirectTo =
+    typeof window !== 'undefined' ? window.location.origin : 'gastoscompartidos://login';
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo },
+  });
+  if (error) throw error;
+}
+
 export async function signOut(): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
