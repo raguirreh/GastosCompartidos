@@ -1,8 +1,7 @@
-import { GoogleOutlined } from '@ant-design/icons';
 import { Alert, Button, Form, Input, Typography } from 'antd';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithGoogle, signInWithPassword } from '../../../services/supabase/auth';
+import { signInWithPassword } from '../../../services/supabase/auth';
 
 interface FormValues {
   email: string;
@@ -12,7 +11,6 @@ interface FormValues {
 export function LoginScreen() {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (values: FormValues) => {
@@ -25,20 +23,6 @@ export function LoginScreen() {
       setError('No pudimos iniciar tu sesión. Revisa tu correo y contraseña.');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setError('');
-    setIsGoogleSubmitting(true);
-    try {
-      await signInWithGoogle();
-      // En web esto redirige a Google; el listener de onAuthStateChange en
-      // main.tsx se encarga del resto al volver.
-    } catch {
-      setError('No pudimos iniciar sesión con Google. Inténtalo de nuevo.');
-    } finally {
-      setIsGoogleSubmitting(false);
     }
   };
 
@@ -77,17 +61,6 @@ export function LoginScreen() {
 
         <Button type="text" block onClick={() => navigate('/signup')} style={{ marginTop: 8 }}>
           ¿No tienes cuenta? Crea una
-        </Button>
-
-        <Button
-          icon={<GoogleOutlined />}
-          block
-          onClick={handleGoogleSignIn}
-          disabled={isSubmitting || isGoogleSubmitting}
-          loading={isGoogleSubmitting}
-          style={{ marginTop: 16, height: 48 }}
-        >
-          Continuar con Google
         </Button>
       </div>
     </div>
