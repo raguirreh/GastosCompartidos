@@ -315,6 +315,51 @@ export async function createExpense(expense: Expense): Promise<void> {
   }
 }
 
+export async function updateExpense(expense: Expense): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error: expenseError } = await supabase
+    .from('expenses')
+    .update({
+      description: expense.description,
+      amount: expense.amount,
+      currency: expense.currency,
+      paid_by: expense.paidBy,
+      category: expense.category,
+      expense_date: new Date(expense.date).toISOString().slice(0, 10),
+      notes: expense.notes,
+    })
+    .eq('id', expense.id);
+  if (expenseError) throw expenseError;
+
+  const { error: deleteSplitsError } = await supabase.from('splits').delete().eq('expense_id', expense.id);
+  if (deleteSplitsError) throw deleteSplitsError;
+
+  if (expense.splits.length > 0) {
+    const { error: splitsError } = await supabase.from('splits').insert(
+      expense.splits.map((s) => ({
+        expense_id: expense.id,
+        user_id: s.userId,
+        amount: s.amount,
+        percentage: s.percentage,
+      }))
+    );
+    if (splitsError) throw splitsError;
+  }
+}
+
+export async function deleteExpense(expenseId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error: splitsError } = await supabase.from('splits').delete().eq('expense_id', expenseId);
+  if (splitsError) throw splitsError;
+
+  const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+  if (error) throw error;
+}
+
 export async function fetchExpensesForGroup(groupId: string): Promise<Expense[]> {
   const supabase = getSupabase();
   if (!supabase) return [];

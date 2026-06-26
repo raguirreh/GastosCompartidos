@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { createExpense as createExpenseRemote, fetchExpensesForGroup } from '../services/supabase/api';
+import {
+  createExpense as createExpenseRemote,
+  deleteExpense as deleteExpenseRemote,
+  fetchExpensesForGroup,
+  updateExpense as updateExpenseRemote,
+} from '../services/supabase/api';
 import type { Expense, ExpenseCategory, Split, SplitMode } from '../shared/types';
 import { roundCurrency } from '../shared/utils/debtSimplification';
 import { generateUUID } from '../shared/utils/uuid';
@@ -20,11 +25,26 @@ interface CreateExpenseInput {
   customValues?: Record<string, number>;
 }
 
+interface UpdateExpenseInput extends CreateExpenseInput {
+  id: string;
+}
+
+interface RecordPaymentInput {
+  groupId: string;
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+  currency: string;
+}
+
 interface ExpensesState {
   expensesByGroup: Record<string, Expense[]>;
   setExpensesForGroup: (groupId: string, expenses: Expense[]) => void;
   fetchExpenses: (groupId: string) => Promise<void>;
   addExpense: (input: CreateExpenseInput) => Promise<Expense>;
+  updateExpense: (input: UpdateExpenseInput) => Promise<Expense>;
+  deleteExpense: (groupId: string, expenseId: string) => Promise<void>;
+  recordPayment: (input: RecordPaymentInput) => Promise<Expense>;
   getExpensesForGroup: (groupId: string) => Expense[];
 }
 
@@ -129,6 +149,87 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       notes: input.notes,
       splits,
       createdBy: input.createdBy,
+      createdAt: Date.now(),
+      syncStatus: 'synced',
+    };
+
+    set((state) => {
+      const current = state.expensesByGroup[input.groupId] ?? [];
+      return {
+        expensesByGroup: {
+          ...state.expensesByGroup,
+          [input.groupId]: [expense, ...current],
+        },
+      };
+    });
+
+    await createExpenseRemote(expense);
+
+    return expense;
+  },
+
+  updateExpense: async (input) => {
+    const splits = calculateSplits(input.amount, input.participantIds, input.splitMode, input.id, input.customValues);
+
+    const existing = (get().expensesByGroup[input.groupId] ?? []).find((e) => e.id === input.id);
+
+    const expense: Expense = {
+      id: input.id,
+      groupId: input.groupId,
+      description: input.description,
+      amount: input.amount,
+      currency: input.currency,
+      paidBy: input.paidBy,
+      category: input.category,
+      date: input.date,
+      notes: input.notes,
+      splits,
+      createdBy: existing?.createdBy ?? input.createdBy,
+      createdAt: existing?.createdAt ?? Date.now(),
+      syncStatus: 'synced',
+    };
+
+    await updateExpenseRemote(expense);
+
+    set((state) => ({
+      expensesByGroup: {
+        ...state.expensesByGroup,
+        [input.groupId]: (state.expensesByGroup[input.groupId] ?? []).map((e) =>
+          e.id === input.id ? expense : e
+        ),
+      },
+    }));
+
+    return expense;
+  },
+
+  deleteExpense: async (groupId, expenseId) => {
+    await deleteExpenseRemote(expenseId);
+    set((state) => ({
+      expensesByGroup: {
+        ...state.expensesByGroup,
+        [groupId]: (state.expensesByGroup[groupId] ?? []).filter((e) => e.id !== expenseId),
+      },
+    }));
+  },
+
+  recordPayment: async (input) => {
+    const id = generateUUID();
+    // Un pago se modela como un gasto especial: quien paga (fromUserId) cubre el
+    // monto completo y la única "porción" se asigna a quien recibe (toUserId).
+    // Esto cancela exactamente la deuda existente sin tocar el cálculo de balances.
+    const expense: Expense = {
+      id,
+      groupId: input.groupId,
+      description: 'Pago',
+      amount: input.amount,
+      currency: input.currency,
+      paidBy: input.fromUserId,
+      category: 'payment',
+      date: Date.now(),
+      notes: '',
+      splits: [{ expenseId: id, userId: input.toUserId, amount: input.amount, percentage: null }],
+      createdBy: input.fromUserId,
       createdAt: Date.now(),
       syncStatus: 'synced',
     };

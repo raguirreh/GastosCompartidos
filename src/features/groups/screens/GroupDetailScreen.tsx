@@ -1,15 +1,16 @@
 import { ArrowLeftOutlined, PlusOutlined, UserAddOutlined } from '@ant-design/icons';
-import { Button, Card, Segmented, Typography } from 'antd';
+import { Button, Card, Modal, Segmented, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
 import { InviteModal } from '../../../shared/components/InviteModal';
-import { mockCategories } from '../../../shared/constants/categories';
+import { mockCategories, paymentCategory } from '../../../shared/constants/categories';
 import { computeGroupSettlements } from '../../../shared/utils/debtSimplification';
 import { formatDate, formatMoney } from '../../../shared/utils/format';
 import { useExpensesStore } from '../../../store/expensesStore';
 import { useGroupsStore } from '../../../store/groupsStore';
 import { useProfilesStore } from '../../../store/profilesStore';
+import { useUserStore } from '../../../store/userStore';
 
 type TabKey = 'expenses' | 'balances' | 'members';
 
@@ -23,8 +24,11 @@ export function GroupDetailScreen() {
   const group = getGroupById(groupId);
   const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
   const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
+  const recordPayment = useExpensesStore((s) => s.recordPayment);
   const profiles = useProfilesStore((s) => s.profiles);
   const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
+  const currentUser = useUserStore((s) => s.currentUser);
+  const [payingSettlement, setPayingSettlement] = useState<number | null>(null);
 
   useEffect(() => {
     fetchExpenses(groupId).catch(() => {
@@ -62,6 +66,23 @@ export function GroupDetailScreen() {
       </div>
     );
   }
+
+  const handleRecordPayment = (index: number, fromUserId: string, toUserId: string, amount: number) => {
+    Modal.confirm({
+      title: 'Registrar pago',
+      content: `¿Confirmas que se registró un pago de ${formatMoney(amount, group.currency)}?`,
+      okText: 'Registrar',
+      cancelText: 'Cancelar',
+      onOk: async () => {
+        setPayingSettlement(index);
+        try {
+          await recordPayment({ groupId, fromUserId, toUserId, amount, currency: group.currency });
+        } finally {
+          setPayingSettlement(null);
+        }
+      },
+    });
+  };
 
   return (
     <div style={{ padding: 16, paddingBottom: 96 }}>
@@ -103,20 +124,28 @@ export function GroupDetailScreen() {
           )}
           {groupExpenses.map((expense) => {
             const payer = profiles[expense.paidBy];
-            const category = mockCategories.find((c) => c.value === expense.category);
+            const isPayment = expense.category === 'payment';
+            const category = isPayment ? paymentCategory : mockCategories.find((c) => c.value === expense.category);
             return (
-              <Card key={expense.id} size="small" style={{ marginBottom: 8 }}>
+              <Card
+                key={expense.id}
+                size="small"
+                style={{ marginBottom: 8, cursor: isPayment ? 'default' : 'pointer' }}
+                onClick={isPayment ? undefined : () => navigate(`/app/groups/${groupId}/expenses/${expense.id}`)}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   {payer && <Avatar emoji={payer.emoji} color={payer.avatarColor} size={40} />}
                   <div style={{ flex: 1, overflow: 'hidden' }}>
                     <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {expense.description}
+                      {isPayment ? 'Pago registrado' : expense.description}
                     </div>
                     <div style={{ fontSize: 12, opacity: 0.6 }}>
                       {payer?.name ?? 'Alguien'} pagó · {category?.label} · {formatDate(expense.date)}
                     </div>
                   </div>
-                  <Typography.Text strong>{formatMoney(expense.amount, expense.currency)}</Typography.Text>
+                  <Typography.Text strong style={isPayment ? { color: 'var(--ant-color-success, #52c41a)' } : undefined}>
+                    {formatMoney(expense.amount, expense.currency)}
+                  </Typography.Text>
                 </div>
               </Card>
             );
@@ -148,6 +177,19 @@ export function GroupDetailScreen() {
                   <span aria-hidden="true">↓ </span>
                   {formatMoney(settlement.amount, group.currency)} (deuda pendiente)
                 </Typography.Text>
+                {currentUser && (settlement.fromUserId === currentUser.uid || settlement.toUserId === currentUser.uid) && (
+                  <Button
+                    size="small"
+                    style={{ marginTop: 8 }}
+                    block
+                    loading={payingSettlement === index}
+                    onClick={() =>
+                      handleRecordPayment(index, settlement.fromUserId, settlement.toUserId, settlement.amount)
+                    }
+                  >
+                    Registrar pago
+                  </Button>
+                )}
               </Card>
             );
           })}

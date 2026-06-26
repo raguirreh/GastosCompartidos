@@ -36,6 +36,7 @@ export function AppRouter() {
           <Route path="groups/new" element={<CreateGroupScreen />} />
           <Route path="groups/:groupId" element={<GroupDetailScreen />} />
           <Route path="groups/:groupId/add-expense" element={<AddExpenseScreen />} />
+          <Route path="groups/:groupId/expenses/:expenseId" element={<AddExpenseScreen />} />
           <Route path="balances" element={<BalancesScreen />} />
           <Route path="profile" element={<ProfileScreen />} />
           <Route index element={<Navigate to="home" replace />} />

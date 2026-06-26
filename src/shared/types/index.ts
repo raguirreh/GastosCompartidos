@@ -16,7 +16,8 @@ export type ExpenseCategory =
   | 'shopping'
   | 'health'
   | 'travel'
-  | 'other';
+  | 'other'
+  | 'payment';
 
 export interface User {
   uid: string;

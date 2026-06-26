@@ -11,3 +11,6 @@ export const mockCategories: Array<{ value: Expense['category']; label: string; 
   { value: 'travel', label: 'Viaje', icon: 'airplane' },
   { value: 'other', label: 'Otro', icon: 'dots-horizontal' },
 ];
+
+/** Pseudo-categoría usada para registrar pagos (settle up), no aparece en el selector de gastos. */
+export const paymentCategory = { value: 'payment' as const, label: 'Pago', icon: 'cash' };
