@@ -1,11 +1,12 @@
-import { ArrowLeftOutlined, DeleteOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, DeleteOutlined, SendOutlined } from '@ant-design/icons';
 import { Alert, Button, Input, Modal, Segmented, Select, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
 import { mockCategories } from '../../../shared/constants/categories';
 import type { ExpenseCategory, SplitMode } from '../../../shared/types';
-import { formatDate } from '../../../shared/utils/format';
+import { formatDate, formatRelativeDate } from '../../../shared/utils/format';
+import { useCommentsStore } from '../../../store/commentsStore';
 import { useExpensesStore } from '../../../store/expensesStore';
 import { useGroupsStore } from '../../../store/groupsStore';
 import { useProfilesStore } from '../../../store/profilesStore';
@@ -23,6 +24,9 @@ export function AddExpenseScreen() {
   const getGroupById = useGroupsStore((s) => s.getGroupById);
   const profiles = useProfilesStore((s) => s.profiles);
   const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
+  const commentsByExpense = useCommentsStore((s) => s.commentsByExpense);
+  const fetchComments = useCommentsStore((s) => s.fetchComments);
+  const addComment = useCommentsStore((s) => s.addComment);
 
   const group = getGroupById(groupId);
   const existingExpense = useMemo(
@@ -61,11 +65,37 @@ export function AddExpenseScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState('');
+  const [commentBody, setCommentBody] = useState('');
+  const [isCommenting, setIsCommenting] = useState(false);
 
   useEffect(() => {
     if (group && !isEditing) setParticipantIds(group.memberIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group, isEditing]);
+
+  useEffect(() => {
+    if (expenseId) {
+      fetchComments(expenseId).catch(() => {
+        // Si falla, el hilo de comentarios queda vacío.
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenseId]);
+
+  const comments = expenseId ? commentsByExpense[expenseId] ?? [] : [];
+
+  const handleAddComment = async () => {
+    if (!commentBody.trim() || !expenseId || !currentUser) return;
+    setIsCommenting(true);
+    try {
+      await addComment({ expenseId, userId: currentUser.uid, body: commentBody.trim() });
+      setCommentBody('');
+    } catch {
+      // Si falla, el comentario simplemente no se agrega.
+    } finally {
+      setIsCommenting(false);
+    }
+  };
 
   const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
 
@@ -287,6 +317,49 @@ export function AddExpenseScreen() {
       </Button>
       {error.length > 0 && (
         <Alert type="error" message={error} style={{ marginTop: 16 }} />
+      )}
+
+      {isEditing && (
+        <div style={{ marginTop: 32 }}>
+          <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+            Comentarios
+          </Typography.Text>
+          {comments.length === 0 && (
+            <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+              Sin comentarios todavía.
+            </Typography.Text>
+          )}
+          {comments.map((comment) => {
+            const author = profiles[comment.userId];
+            return (
+              <div key={comment.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
+                {author && <Avatar emoji={author.emoji} color={author.avatarColor} size={28} />}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, opacity: 0.6 }}>
+                    {author?.name ?? 'Alguien'} · {formatRelativeDate(comment.createdAt)}
+                  </div>
+                  <div>{comment.body}</div>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <Input
+              placeholder="Escribe un comentario"
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value)}
+              onPressEnter={handleAddComment}
+            />
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              aria-label="Enviar comentario"
+              onClick={handleAddComment}
+              loading={isCommenting}
+              disabled={!commentBody.trim()}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

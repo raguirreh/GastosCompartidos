@@ -67,6 +67,14 @@ export interface Expense {
   syncStatus: SyncStatus;
 }
 
+export interface Comment {
+  id: string;
+  expenseId: string;
+  userId: string;
+  body: string;
+  createdAt: number;
+}
+
 export interface BalanceRecord {
   groupId: string;
   fromUserId: string;

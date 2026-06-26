@@ -1,5 +1,5 @@
 import { getSupabase } from './client';
-import type { Expense, Group, Split, User } from '../../shared/types';
+import type { Comment, Expense, Group, Split, User } from '../../shared/types';
 
 /**
  * CRUD real contra Supabase (Postgres + RLS). Reemplaza los helpers de
@@ -383,4 +383,57 @@ export async function fetchExpensesForGroup(groupId: string): Promise<Expense[]>
   }
 
   return (expenseRows ?? []).map((row) => rowsToExpense(row as ExpenseRow, splitRows));
+}
+
+interface CommentRow {
+  id: string;
+  expense_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+}
+
+function commentRowToComment(row: CommentRow): Comment {
+  return {
+    id: row.id,
+    expenseId: row.expense_id,
+    userId: row.user_id,
+    body: row.body,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+export async function fetchCommentsForExpense(expenseId: string): Promise<Comment[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('comments')
+    .select('*')
+    .eq('expense_id', expenseId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+
+  return (data ?? []).map((row) => commentRowToComment(row as CommentRow));
+}
+
+export async function createComment(comment: Comment): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.from('comments').insert({
+    id: comment.id,
+    expense_id: comment.expenseId,
+    user_id: comment.userId,
+    body: comment.body,
+  });
+  if (error) throw error;
+}
+
+export async function deleteComment(commentId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.from('comments').delete().eq('id', commentId);
+  if (error) throw error;
 }
