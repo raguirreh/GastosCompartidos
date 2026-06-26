@@ -29,8 +29,11 @@ export function BalancesScreen() {
   const profiles = useProfilesStore((s) => s.profiles);
   const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
 
+  const recordPayment = useExpensesStore((s) => s.recordPayment);
+
   const [dialogEntry, setDialogEntry] = useState<SettlementEntry | null>(null);
   const [dialogAction, setDialogAction] = useState<'request' | 'register' | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -127,10 +130,21 @@ export function BalancesScreen() {
     closeDialog();
   };
 
-  const handleRegisterPayment = () => {
-    // TODO: en una implementación completa esto crearía una `Transaction`
-    // con status 'pending' y la encolaría para confirmación.
-    closeDialog();
+  const handleRegisterPayment = async (entry: SettlementEntry) => {
+    if (!currentUser) return;
+    setIsRegistering(true);
+    try {
+      await recordPayment({
+        groupId: entry.groupId,
+        fromUserId: currentUser.uid,
+        toUserId: entry.otherUserId,
+        amount: Math.abs(entry.amount),
+        currency: entry.currency,
+      });
+      closeDialog();
+    } finally {
+      setIsRegistering(false);
+    }
   };
 
   const renderEntry = (entry: SettlementEntry, type: 'owed' | 'owe') => {
@@ -220,10 +234,11 @@ export function BalancesScreen() {
           if (dialogAction === 'request') {
             handleRequestPayment(dialogEntry);
           } else {
-            handleRegisterPayment();
+            handleRegisterPayment(dialogEntry);
           }
         }}
         okText="Confirmar"
+        okButtonProps={{ loading: isRegistering }}
         cancelText="Cancelar"
       >
         <Typography.Text>
