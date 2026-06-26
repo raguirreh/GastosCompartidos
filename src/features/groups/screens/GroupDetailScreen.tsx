@@ -1,5 +1,5 @@
-import { ArrowLeftOutlined, PlusOutlined, UserAddOutlined } from '@ant-design/icons';
-import { Button, Card, Modal, Segmented, Typography } from 'antd';
+import { ArrowLeftOutlined, PlusOutlined, SearchOutlined, UserAddOutlined } from '@ant-design/icons';
+import { Button, Card, Input, Modal, Segmented, Select, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
@@ -19,6 +19,8 @@ export function GroupDetailScreen() {
   const { groupId = '' } = useParams<{ groupId: string }>();
   const [tab, setTab] = useState<TabKey>('expenses');
   const [inviteVisible, setInviteVisible] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const getGroupById = useGroupsStore((s) => s.getGroupById);
   const group = getGroupById(groupId);
@@ -46,6 +48,17 @@ export function GroupDetailScreen() {
   }, [group]);
 
   const groupExpenses = useMemo(() => expensesByGroup[groupId] ?? [], [expensesByGroup, groupId]);
+
+  const filteredExpenses = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    return groupExpenses.filter((expense) => {
+      if (categoryFilter !== 'all' && expense.category !== categoryFilter) return false;
+      if (query && !expense.description.toLowerCase().includes(query) && !expense.notes.toLowerCase().includes(query)) {
+        return false;
+      }
+      return true;
+    });
+  }, [groupExpenses, searchText, categoryFilter]);
 
   const settlements = useMemo(
     () =>
@@ -119,10 +132,35 @@ export function GroupDetailScreen() {
 
       {tab === 'expenses' && (
         <div role="main">
+          {groupExpenses.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <Input
+                placeholder="Buscar gastos"
+                prefix={<SearchOutlined />}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                allowClear
+                style={{ flex: 1 }}
+              />
+              <Select
+                value={categoryFilter}
+                onChange={(value) => setCategoryFilter(value)}
+                style={{ width: 140 }}
+                options={[
+                  { value: 'all', label: 'Todas' },
+                  ...mockCategories.map((cat) => ({ value: cat.value, label: cat.label })),
+                  { value: 'payment', label: paymentCategory.label },
+                ]}
+              />
+            </div>
+          )}
           {groupExpenses.length === 0 && (
             <Typography.Text type="secondary">Todavía no hay gastos en este grupo.</Typography.Text>
           )}
-          {groupExpenses.map((expense) => {
+          {groupExpenses.length > 0 && filteredExpenses.length === 0 && (
+            <Typography.Text type="secondary">No hay gastos que coincidan con la búsqueda.</Typography.Text>
+          )}
+          {filteredExpenses.map((expense) => {
             const payer = profiles[expense.paidBy];
             const isPayment = expense.category === 'payment';
             const category = isPayment ? paymentCategory : mockCategories.find((c) => c.value === expense.category);
