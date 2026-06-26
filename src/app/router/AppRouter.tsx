@@ -3,6 +3,7 @@ import { SplashScreen } from '../../features/auth/screens/SplashScreen';
 import { OnboardingScreen } from '../../features/auth/screens/OnboardingScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
 import { AuthScreen } from '../../features/auth/screens/AuthScreen';
+import { LogoutScreen } from '../../features/auth/screens/LogoutScreen';
 import { SignUpScreen } from '../../features/auth/screens/SignUpScreen';
 import { ProfileSetupScreen } from '../../features/auth/screens/ProfileSetupScreen';
 import { JoinGroupScreen } from '../../features/groups/screens/JoinGroupScreen';
@@ -23,6 +24,7 @@ export function AppRouter() {
       <Route path="/onboarding" element={<OnboardingScreen />} />
       <Route path="/login" element={<LoginScreen />} />
       <Route path="/auth-demo" element={<AuthScreen />} />
+      <Route path="/logout" element={<LogoutScreen />} />
       <Route path="/signup" element={<SignUpScreen />} />
       <Route path="/profile-setup" element={<ProfileSetupScreen />} />
       <Route path="/join/:token" element={<JoinGroupScreen />} />
