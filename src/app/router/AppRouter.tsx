@@ -14,6 +14,7 @@ import { AddFriendScreen } from '../../features/groups/screens/AddFriendScreen';
 import { GroupDetailScreen } from '../../features/groups/screens/GroupDetailScreen';
 import { CreateGroupScreen } from '../../features/groups/screens/CreateGroupScreen';
 import { AddExpenseScreen } from '../../features/expenses/screens/AddExpenseScreen';
+import { ExpenseSearchScreen } from '../../features/expenses/screens/ExpenseSearchScreen';
 import { BalancesScreen } from '../../features/balances/screens/BalancesScreen';
 import { ProfileScreen } from '../../features/profile/screens/ProfileScreen';
 import { MainLayout } from './MainLayout';
@@ -41,6 +42,7 @@ export function AppRouter() {
           <Route path="groups/:groupId" element={<GroupDetailScreen />} />
           <Route path="groups/:groupId/add-expense" element={<AddExpenseScreen />} />
           <Route path="groups/:groupId/expenses/:expenseId" element={<AddExpenseScreen />} />
+          <Route path="search" element={<ExpenseSearchScreen />} />
           <Route path="balances" element={<BalancesScreen />} />
           <Route path="profile" element={<ProfileScreen />} />
           <Route index element={<Navigate to="home" replace />} />

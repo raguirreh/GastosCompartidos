@@ -1,4 +1,4 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { Button, Card, Typography } from 'antd';
 import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -94,6 +94,12 @@ export function HomeScreen() {
             Esto es lo que pasa con tu dinero
           </Typography.Text>
         </div>
+        <Button
+          type="text"
+          icon={<SearchOutlined />}
+          aria-label="Buscar gastos"
+          onClick={() => navigate('/app/search')}
+        />
         <OnlineIndicator />
       </div>
 
