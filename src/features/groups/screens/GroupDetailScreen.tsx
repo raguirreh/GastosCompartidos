@@ -1,5 +1,5 @@
-import { ArrowLeftOutlined, PlusOutlined, SearchOutlined, UserAddOutlined } from '@ant-design/icons';
-import { Button, Card, Input, Modal, Segmented, Select, Typography } from 'antd';
+import { ArrowLeftOutlined, PlusOutlined, SearchOutlined, SettingOutlined, UserAddOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Form, Input, Modal, Segmented, Select, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
@@ -14,6 +14,9 @@ import { useUserStore } from '../../../store/userStore';
 
 type TabKey = 'expenses' | 'balances' | 'members';
 
+const EMOJI_OPTIONS = ['🏠', '🏔️', '🍖', '✈️', '🎉', '🚗', '💼', '🎓'];
+const CURRENCIES = ['PEN', 'USD', 'EUR', 'MXN', 'ARS', 'COP'];
+
 export function GroupDetailScreen() {
   const navigate = useNavigate();
   const { groupId = '' } = useParams<{ groupId: string }>();
@@ -23,6 +26,8 @@ export function GroupDetailScreen() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const getGroupById = useGroupsStore((s) => s.getGroupById);
+  const updateGroup = useGroupsStore((s) => s.updateGroup);
+  const leaveGroup = useGroupsStore((s) => s.leaveGroup);
   const group = getGroupById(groupId);
   const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
   const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
@@ -31,6 +36,13 @@ export function GroupDetailScreen() {
   const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
   const currentUser = useUserStore((s) => s.currentUser);
   const [payingSettlement, setPayingSettlement] = useState<number | null>(null);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editEmoji, setEditEmoji] = useState('');
+  const [editCurrency, setEditCurrency] = useState('');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
 
   useEffect(() => {
     fetchExpenses(groupId).catch(() => {
@@ -80,6 +92,49 @@ export function GroupDetailScreen() {
     );
   }
 
+  const openSettings = () => {
+    setEditName(group.name);
+    setEditEmoji(group.emoji);
+    setEditCurrency(group.currency);
+    setSettingsError('');
+    setSettingsVisible(true);
+  };
+
+  const handleSaveSettings = async () => {
+    if (!editName.trim()) return;
+    setSettingsError('');
+    setIsSavingSettings(true);
+    try {
+      await updateGroup(groupId, { name: editName.trim(), emoji: editEmoji, currency: editCurrency });
+      setSettingsVisible(false);
+    } catch {
+      setSettingsError('No pudimos guardar los cambios. Inténtalo de nuevo.');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleLeaveGroup = () => {
+    if (!currentUser) return;
+    Modal.confirm({
+      title: 'Salir del grupo',
+      content: '¿Seguro que quieres salir de este grupo? Dejarás de ver sus gastos y saldos.',
+      okText: 'Salir',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancelar',
+      onOk: async () => {
+        setIsLeaving(true);
+        try {
+          await leaveGroup(groupId, currentUser.uid);
+          setSettingsVisible(false);
+          navigate('/app/groups', { replace: true });
+        } finally {
+          setIsLeaving(false);
+        }
+      },
+    });
+  };
+
   const handleRecordPayment = (index: number, fromUserId: string, toUserId: string, amount: number) => {
     Modal.confirm({
       title: 'Registrar pago',
@@ -116,6 +171,9 @@ export function GroupDetailScreen() {
           aria-label="Invitar miembro"
           onClick={() => setInviteVisible(true)}
         />
+        {!group.isDirect && (
+          <Button type="text" icon={<SettingOutlined />} aria-label="Configuración del grupo" onClick={openSettings} />
+        )}
       </div>
 
       <Segmented
@@ -272,6 +330,59 @@ export function GroupDetailScreen() {
         inviteToken={group.inviteToken}
         groupName={group.name}
       />
+
+      <Modal
+        open={settingsVisible}
+        onCancel={() => setSettingsVisible(false)}
+        title="Configuración del grupo"
+        footer={null}
+      >
+        <Form layout="vertical" disabled={isSavingSettings}>
+          <Form.Item label="Nombre del grupo">
+            <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+          </Form.Item>
+
+          <Typography.Text strong>Emoji</Typography.Text>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 16px' }}>
+            {EMOJI_OPTIONS.map((option) => (
+              <Button
+                key={option}
+                type={option === editEmoji ? 'primary' : 'default'}
+                onClick={() => setEditEmoji(option)}
+                style={{ minWidth: 48 }}
+                aria-label={`Emoji ${option}`}
+              >
+                {option}
+              </Button>
+            ))}
+          </div>
+
+          <Form.Item label="Moneda">
+            <Select
+              value={editCurrency}
+              onChange={setEditCurrency}
+              options={CURRENCIES.map((option) => ({ value: option, label: option }))}
+              style={{ width: 160 }}
+            />
+          </Form.Item>
+
+          {settingsError.length > 0 && <Alert type="error" message={settingsError} style={{ marginBottom: 16 }} />}
+
+          <Button
+            type="primary"
+            block
+            onClick={handleSaveSettings}
+            disabled={!editName.trim() || isSavingSettings}
+            loading={isSavingSettings}
+            style={{ marginBottom: 8 }}
+          >
+            Guardar cambios
+          </Button>
+          <Button danger block onClick={handleLeaveGroup} loading={isLeaving}>
+            Salir del grupo
+          </Button>
+        </Form>
+      </Modal>
     </div>
   );
 }

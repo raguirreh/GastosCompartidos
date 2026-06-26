@@ -159,6 +159,32 @@ export async function upsertExpenseDoc(expense: Expense): Promise<void> {
   }
 }
 
+export async function updateGroup(
+  groupId: string,
+  fields: { name: string; emoji: string; currency: string }
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('groups')
+    .update({ name: fields.name, emoji: fields.emoji, currency: fields.currency })
+    .eq('id', groupId);
+  if (error) throw error;
+}
+
+export async function leaveGroup(groupId: string, userId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
 export async function joinGroup(groupId: string, userId: string): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;

@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { createGroup as createGroupRemote, fetchGroupsForUser } from '../services/supabase/api';
+import {
+  createGroup as createGroupRemote,
+  fetchGroupsForUser,
+  leaveGroup as leaveGroupRemote,
+  updateGroup as updateGroupRemote,
+} from '../services/supabase/api';
 import type { Group } from '../shared/types';
 import { generateUUID } from '../shared/utils/uuid';
 
@@ -17,6 +22,8 @@ interface GroupsState {
   setGroups: (groups: Group[]) => void;
   fetchGroups: (userId: string) => Promise<void>;
   createGroup: (input: CreateGroupInput) => Promise<Group>;
+  updateGroup: (groupId: string, fields: { name: string; emoji: string; currency: string }) => Promise<void>;
+  leaveGroup: (groupId: string, userId: string) => Promise<void>;
   addMember: (groupId: string, userId: string) => void;
   getGroupById: (groupId: string) => Group | undefined;
 }
@@ -50,6 +57,18 @@ export const useGroupsStore = create<GroupsState>((set, get) => ({
 
     set((state) => ({ groups: [newGroup, ...state.groups] }));
     return newGroup;
+  },
+
+  updateGroup: async (groupId, fields) => {
+    await updateGroupRemote(groupId, fields);
+    set((state) => ({
+      groups: state.groups.map((group) => (group.id === groupId ? { ...group, ...fields } : group)),
+    }));
+  },
+
+  leaveGroup: async (groupId, userId) => {
+    await leaveGroupRemote(groupId, userId);
+    set((state) => ({ groups: state.groups.filter((g) => g.id !== groupId) }));
   },
 
   addMember: (groupId, userId) =>
