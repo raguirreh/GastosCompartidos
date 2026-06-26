@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
 import { mockCategories } from '../../../shared/constants/categories';
-import type { ExpenseCategory, SplitMode } from '../../../shared/types';
+import type { ExpenseCategory, RecurrenceRule, SplitMode } from '../../../shared/types';
 import { formatDate, formatRelativeDate } from '../../../shared/utils/format';
 import { useCommentsStore } from '../../../store/commentsStore';
 import { useExpensesStore } from '../../../store/expensesStore';
@@ -59,6 +59,9 @@ export function AddExpenseScreen() {
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
   const [category, setCategory] = useState<ExpenseCategory>(existingExpense?.category ?? 'food');
   const [notes, setNotes] = useState(existingExpense?.notes ?? '');
+  const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | 'none'>(
+    existingExpense?.recurrenceRule ?? 'none'
+  );
   const [participantIds, setParticipantIds] = useState<string[]>(
     existingExpense ? existingExpense.splits.map((s) => s.userId) : group?.memberIds ?? []
   );
@@ -126,6 +129,7 @@ export function AddExpenseScreen() {
           createdBy: currentUser.uid,
           splitMode,
           participantIds,
+          recurrenceRule: recurrenceRule === 'none' ? null : recurrenceRule,
         });
       } else {
         await addExpense({
@@ -140,6 +144,7 @@ export function AddExpenseScreen() {
           createdBy: currentUser.uid,
           splitMode,
           participantIds,
+          recurrenceRule: recurrenceRule === 'none' ? null : recurrenceRule,
         });
       }
       navigate(-1);
@@ -279,6 +284,22 @@ export function AddExpenseScreen() {
           división igual como base.
         </Typography.Text>
       )}
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Repetir
+      </Typography.Text>
+      <Segmented
+        value={recurrenceRule}
+        onChange={(value) => setRecurrenceRule(value as RecurrenceRule | 'none')}
+        block
+        style={{ marginBottom: 16 }}
+        options={[
+          { value: 'none', label: 'Nunca' },
+          { value: 'weekly', label: 'Semanal' },
+          { value: 'monthly', label: 'Mensual' },
+          { value: 'yearly', label: 'Anual' },
+        ]}
+      />
 
       <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
         Categoría

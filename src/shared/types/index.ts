@@ -67,7 +67,13 @@ export interface Expense {
   createdBy: string;
   createdAt: number;
   syncStatus: SyncStatus;
+  /** Si está presente, este gasto es una plantilla que genera nuevas instancias periódicamente. */
+  recurrenceRule: RecurrenceRule | null;
+  /** Próxima fecha (epoch ms) en la que debe generarse la siguiente instancia. Solo aplica a plantillas. */
+  nextOccurrenceDate: number | null;
 }
+
+export type RecurrenceRule = 'weekly' | 'monthly' | 'yearly';
 
 export interface Comment {
   id: string;

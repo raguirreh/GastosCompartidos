@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import {
+  advanceRecurrence,
   createExpense as createExpenseRemote,
   deleteExpense as deleteExpenseRemote,
   fetchExpensesForGroup,
   updateExpense as updateExpenseRemote,
 } from '../services/supabase/api';
-import type { Expense, ExpenseCategory, Split, SplitMode } from '../shared/types';
+import type { Expense, ExpenseCategory, RecurrenceRule, Split, SplitMode } from '../shared/types';
 import { roundCurrency } from '../shared/utils/debtSimplification';
+import { nextOccurrence } from '../shared/utils/recurrence';
 import { generateUUID } from '../shared/utils/uuid';
 
 interface CreateExpenseInput {
@@ -23,6 +25,8 @@ interface CreateExpenseInput {
   participantIds: string[];
   /** Para modo 'percentage': % por usuario. Para modo 'exact': monto por usuario. Para 'shares': número de shares por usuario. */
   customValues?: Record<string, number>;
+  /** Si se define, este gasto se convierte en plantilla que genera nuevas instancias periódicamente. */
+  recurrenceRule?: RecurrenceRule | null;
 }
 
 interface UpdateExpenseInput extends CreateExpenseInput {
@@ -41,6 +45,7 @@ interface ExpensesState {
   expensesByGroup: Record<string, Expense[]>;
   setExpensesForGroup: (groupId: string, expenses: Expense[]) => void;
   fetchExpenses: (groupId: string) => Promise<void>;
+  generateDueOccurrences: (groupId: string) => Promise<void>;
   addExpense: (input: CreateExpenseInput) => Promise<Expense>;
   updateExpense: (input: UpdateExpenseInput) => Promise<Expense>;
   deleteExpense: (groupId: string, expenseId: string) => Promise<void>;
@@ -125,6 +130,48 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
     set((state) => ({
       expensesByGroup: { ...state.expensesByGroup, [groupId]: expenses },
     }));
+    await get().generateDueOccurrences(groupId);
+  },
+
+  generateDueOccurrences: async (groupId) => {
+    const templates = (get().expensesByGroup[groupId] ?? []).filter(
+      (e) => e.recurrenceRule && e.nextOccurrenceDate !== null && e.nextOccurrenceDate <= Date.now()
+    );
+
+    for (const template of templates) {
+      let nextDate = template.nextOccurrenceDate as number;
+      const generated: Expense[] = [];
+      let iterations = 0;
+
+      while (nextDate <= Date.now() && iterations < 24) {
+        const id = generateUUID();
+        const occurrence: Expense = {
+          ...template,
+          id,
+          date: nextDate,
+          createdAt: Date.now(),
+          splits: template.splits.map((s) => ({ ...s, expenseId: id })),
+          recurrenceRule: null,
+          nextOccurrenceDate: null,
+        };
+        await createExpenseRemote(occurrence);
+        generated.push(occurrence);
+        nextDate = nextOccurrence(nextDate, template.recurrenceRule as RecurrenceRule);
+        iterations += 1;
+      }
+
+      if (generated.length > 0) {
+        await advanceRecurrence(template.id, nextDate);
+        set((state) => ({
+          expensesByGroup: {
+            ...state.expensesByGroup,
+            [groupId]: (state.expensesByGroup[groupId] ?? []).map((e) =>
+              e.id === template.id ? { ...e, nextOccurrenceDate: nextDate } : e
+            ).concat(generated),
+          },
+        }));
+      }
+    }
   },
 
   addExpense: async (input) => {
@@ -136,6 +183,7 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       id,
       input.customValues
     );
+    const recurrenceRule = input.recurrenceRule ?? null;
 
     const expense: Expense = {
       id,
@@ -151,6 +199,8 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       createdBy: input.createdBy,
       createdAt: Date.now(),
       syncStatus: 'synced',
+      recurrenceRule,
+      nextOccurrenceDate: recurrenceRule ? nextOccurrence(input.date, recurrenceRule) : null,
     };
 
     set((state) => {
@@ -172,6 +222,12 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
     const splits = calculateSplits(input.amount, input.participantIds, input.splitMode, input.id, input.customValues);
 
     const existing = (get().expensesByGroup[input.groupId] ?? []).find((e) => e.id === input.id);
+    const recurrenceRule = input.recurrenceRule ?? null;
+    const nextOccurrenceDate = recurrenceRule
+      ? existing?.recurrenceRule === recurrenceRule && existing?.nextOccurrenceDate
+        ? existing.nextOccurrenceDate
+        : nextOccurrence(input.date, recurrenceRule)
+      : null;
 
     const expense: Expense = {
       id: input.id,
@@ -187,6 +243,8 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       createdBy: existing?.createdBy ?? input.createdBy,
       createdAt: existing?.createdAt ?? Date.now(),
       syncStatus: 'synced',
+      recurrenceRule,
+      nextOccurrenceDate,
     };
 
     await updateExpenseRemote(expense);
@@ -232,6 +290,8 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       createdBy: input.fromUserId,
       createdAt: Date.now(),
       syncStatus: 'synced',
+      recurrenceRule: null,
+      nextOccurrenceDate: null,
     };
 
     set((state) => {

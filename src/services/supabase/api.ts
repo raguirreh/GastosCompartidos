@@ -258,6 +258,8 @@ interface ExpenseRow {
   notes: string | null;
   created_by: string;
   created_at: string;
+  recurrence_rule: string | null;
+  next_occurrence_date: string | null;
 }
 
 interface SplitRow {
@@ -286,6 +288,8 @@ function rowsToExpense(row: ExpenseRow, splitRows: SplitRow[]): Expense {
     createdBy: row.created_by,
     createdAt: new Date(row.created_at).getTime(),
     syncStatus: 'synced',
+    recurrenceRule: (row.recurrence_rule as Expense['recurrenceRule']) ?? null,
+    nextOccurrenceDate: row.next_occurrence_date ? new Date(row.next_occurrence_date).getTime() : null,
   };
 }
 
@@ -304,6 +308,10 @@ export async function createExpense(expense: Expense): Promise<void> {
     expense_date: new Date(expense.date).toISOString().slice(0, 10),
     notes: expense.notes,
     created_by: expense.createdBy,
+    recurrence_rule: expense.recurrenceRule,
+    next_occurrence_date: expense.nextOccurrenceDate
+      ? new Date(expense.nextOccurrenceDate).toISOString().slice(0, 10)
+      : null,
   });
   if (expenseError) throw expenseError;
 
@@ -334,6 +342,10 @@ export async function updateExpense(expense: Expense): Promise<void> {
       category: expense.category,
       expense_date: new Date(expense.date).toISOString().slice(0, 10),
       notes: expense.notes,
+      recurrence_rule: expense.recurrenceRule,
+      next_occurrence_date: expense.nextOccurrenceDate
+        ? new Date(expense.nextOccurrenceDate).toISOString().slice(0, 10)
+        : null,
     })
     .eq('id', expense.id);
   if (expenseError) throw expenseError;
@@ -352,6 +364,18 @@ export async function updateExpense(expense: Expense): Promise<void> {
     );
     if (splitsError) throw splitsError;
   }
+}
+
+/** Avanza la fecha de próxima ocurrencia de una plantilla recurrente tras generar una instancia. */
+export async function advanceRecurrence(expenseId: string, nextOccurrenceDate: number): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('expenses')
+    .update({ next_occurrence_date: new Date(nextOccurrenceDate).toISOString().slice(0, 10) })
+    .eq('id', expenseId);
+  if (error) throw error;
 }
 
 export async function deleteExpense(expenseId: string): Promise<void> {
