@@ -1,16 +1,20 @@
 import { ExportOutlined, LogoutOutlined } from '@ant-design/icons';
 import { Button, Card, Switch, Typography, message } from 'antd';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
 import { signOut } from '../../../services/supabase/auth';
+import { formatMoney } from '../../../shared/utils/format';
+import { useExpensesStore } from '../../../store/expensesStore';
+import { useGroupsStore } from '../../../store/groupsStore';
 import { useUserStore } from '../../../store/userStore';
 
-const mockStats = {
-  totalGroups: 3,
-  totalExpenses: 4,
-  totalSpent: 1990,
-};
+function escapeCsvField(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
 
 export function ProfileScreen() {
   const navigate = useNavigate();
@@ -18,10 +22,54 @@ export function ProfileScreen() {
   const updateProfile = useUserStore((s) => s.updateProfile);
   const themePreference = useUserStore((s) => s.themePreference);
   const toggleTheme = useUserStore((s) => s.toggleTheme);
+  const groups = useGroupsStore((s) => s.groups);
+  const fetchGroups = useGroupsStore((s) => s.fetchGroups);
+  const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
+  const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
 
   const [isEditing, setIsEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(currentUser?.name ?? '');
   const [isSigningOut, setIsSigningOut] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchGroups(currentUser.uid).catch(() => {
+        // Si falla, las estadísticas simplemente quedan vacías.
+      });
+    }
+  }, [currentUser, fetchGroups]);
+
+  useEffect(() => {
+    groups.forEach((group) => {
+      fetchExpenses(group.id).catch(() => {
+        // Ignoramos errores individuales por grupo.
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups]);
+
+  const realGroups = useMemo(() => groups.filter((g) => !g.isDirect), [groups]);
+
+  const userExpenses = useMemo(() => {
+    if (!currentUser) return [];
+    return Object.values(expensesByGroup)
+      .flat()
+      .filter(
+        (expense) =>
+          expense.category !== 'payment' &&
+          (expense.paidBy === currentUser.uid || expense.splits.some((s) => s.userId === currentUser.uid))
+      );
+  }, [expensesByGroup, currentUser]);
+
+  const spentByCurrency = useMemo(() => {
+    const result: Record<string, number> = {};
+    if (!currentUser) return result;
+    for (const expense of userExpenses) {
+      if (expense.paidBy !== currentUser.uid) continue;
+      result[expense.currency] = (result[expense.currency] ?? 0) + expense.amount;
+    }
+    return result;
+  }, [userExpenses, currentUser]);
 
   const handleSaveName = () => {
     if (nameDraft.trim()) {
@@ -31,7 +79,38 @@ export function ProfileScreen() {
   };
 
   const handleExportCSV = () => {
-    message.info('Esta función todavía no está implementada. Próximamente podrás exportar tus gastos a un archivo CSV.');
+    if (userExpenses.length === 0) {
+      message.info('No tienes gastos para exportar todavía.');
+      return;
+    }
+    const header = ['Fecha', 'Grupo', 'Descripción', 'Categoría', 'Monto', 'Moneda', 'Pagado por'];
+    const rows = userExpenses
+      .slice()
+      .sort((a, b) => b.date - a.date)
+      .map((expense) => {
+        const group = groups.find((g) => g.id === expense.groupId);
+        return [
+          new Date(expense.date).toISOString().slice(0, 10),
+          group?.name ?? '',
+          expense.description,
+          expense.category,
+          expense.amount.toFixed(2),
+          expense.currency,
+          expense.paidBy === currentUser?.uid ? 'Yo' : expense.paidBy,
+        ]
+          .map((field) => escapeCsvField(String(field)))
+          .join(',');
+      });
+    const csv = [header.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `gastos-compartidos-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleSignOut = async () => {
@@ -70,10 +149,10 @@ export function ProfileScreen() {
       </div>
 
       <Card style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: Object.keys(spentByCurrency).length > 0 ? 12 : 0 }}>
           <div style={{ textAlign: 'center', flex: 1 }}>
             <Typography.Title level={4} style={{ margin: 0 }}>
-              {mockStats.totalGroups}
+              {realGroups.length}
             </Typography.Title>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               Grupos
@@ -81,21 +160,20 @@ export function ProfileScreen() {
           </div>
           <div style={{ textAlign: 'center', flex: 1 }}>
             <Typography.Title level={4} style={{ margin: 0 }}>
-              {mockStats.totalExpenses}
+              {userExpenses.length}
             </Typography.Title>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               Gastos
             </Typography.Text>
           </div>
-          <div style={{ textAlign: 'center', flex: 1 }}>
-            <Typography.Title level={4} style={{ margin: 0 }}>
-              S/.{mockStats.totalSpent}
-            </Typography.Title>
+        </div>
+        {Object.entries(spentByCurrency).map(([currency, amount]) => (
+          <div key={currency} style={{ textAlign: 'center' }}>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              Total
+              Pagado por ti en {currency}: <strong>{formatMoney(amount, currency)}</strong>
             </Typography.Text>
           </div>
-        </div>
+        ))}
       </Card>
 
       <Card style={{ marginBottom: 16 }}>
