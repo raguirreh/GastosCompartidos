@@ -16,7 +16,8 @@ export type ExpenseCategory =
   | 'shopping'
   | 'health'
   | 'travel'
-  | 'other';
+  | 'other'
+  | 'payment';
 
 export interface User {
   uid: string;
@@ -35,6 +36,9 @@ export interface Group {
   createdBy: string;
   memberIds: string[];
   inviteToken: string;
+  /** true para un "grupo" 1-a-1 creado por la funcionalidad de Amigos (no aparece en la lista de Grupos). */
+  isDirect: boolean;
+  archived: boolean;
 }
 
 export interface GroupMember {
@@ -64,6 +68,22 @@ export interface Expense {
   createdBy: string;
   createdAt: number;
   syncStatus: SyncStatus;
+  /** Si está presente, este gasto es una plantilla que genera nuevas instancias periódicamente. */
+  recurrenceRule: RecurrenceRule | null;
+  /** Próxima fecha (epoch ms) en la que debe generarse la siguiente instancia. Solo aplica a plantillas. */
+  nextOccurrenceDate: number | null;
+  /** Path en el bucket de storage `receipts` de la foto del recibo, si se adjuntó una. Resolver con `getReceiptUrl`. */
+  receiptUrl: string | null;
+}
+
+export type RecurrenceRule = 'weekly' | 'monthly' | 'yearly';
+
+export interface Comment {
+  id: string;
+  expenseId: string;
+  userId: string;
+  body: string;
+  createdAt: number;
 }
 
 export interface BalanceRecord {

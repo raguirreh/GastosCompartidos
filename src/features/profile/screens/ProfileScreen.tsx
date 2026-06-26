@@ -1,29 +1,75 @@
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card, Dialog, Portal, Switch, Text, TextInput, useTheme } from 'react-native-paper';
+import { ExportOutlined, LogoutOutlined } from '@ant-design/icons';
+import { Button, Card, Switch, Typography, message } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
-import { resetDatabase } from '../../../services/database/client';
-import { useUserStore } from '../../../store';
+import { signOut } from '../../../services/supabase/auth';
+import { formatMoney } from '../../../shared/utils/format';
+import { useExpensesStore } from '../../../store/expensesStore';
+import { useGroupsStore } from '../../../store/groupsStore';
+import { useUserStore } from '../../../store/userStore';
 
-const mockStats = {
-  totalGroups: 3,
-  totalExpenses: 4,
-  totalSpent: 1990,
-};
+function escapeCsvField(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
 
 export function ProfileScreen() {
-  const theme = useTheme();
+  const navigate = useNavigate();
   const currentUser = useUserStore((s) => s.currentUser);
   const updateProfile = useUserStore((s) => s.updateProfile);
   const themePreference = useUserStore((s) => s.themePreference);
   const toggleTheme = useUserStore((s) => s.toggleTheme);
-  const clearUser = useUserStore((s) => s.clearUser);
+  const groups = useGroupsStore((s) => s.groups);
+  const fetchGroups = useGroupsStore((s) => s.fetchGroups);
+  const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
+  const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
 
   const [isEditing, setIsEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(currentUser?.name ?? '');
-  const [clearDialogVisible, setClearDialogVisible] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchGroups(currentUser.uid).catch(() => {
+        // Si falla, las estadísticas simplemente quedan vacías.
+      });
+    }
+  }, [currentUser, fetchGroups]);
+
+  useEffect(() => {
+    groups.forEach((group) => {
+      fetchExpenses(group.id).catch(() => {
+        // Ignoramos errores individuales por grupo.
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups]);
+
+  const realGroups = useMemo(() => groups.filter((g) => !g.isDirect), [groups]);
+
+  const userExpenses = useMemo(() => {
+    if (!currentUser) return [];
+    return Object.values(expensesByGroup)
+      .flat()
+      .filter(
+        (expense) =>
+          expense.category !== 'payment' &&
+          (expense.paidBy === currentUser.uid || expense.splits.some((s) => s.userId === currentUser.uid))
+      );
+  }, [expensesByGroup, currentUser]);
+
+  const spentByCurrency = useMemo(() => {
+    const result: Record<string, number> = {};
+    if (!currentUser) return result;
+    for (const expense of userExpenses) {
+      if (expense.paidBy !== currentUser.uid) continue;
+      result[expense.currency] = (result[expense.currency] ?? 0) + expense.amount;
+    }
+    return result;
+  }, [userExpenses, currentUser]);
 
   const handleSaveName = () => {
     if (nameDraft.trim()) {
@@ -33,164 +79,124 @@ export function ProfileScreen() {
   };
 
   const handleExportCSV = () => {
-    Alert.alert(
-      'Exportar CSV',
-      'Esta función todavía no está implementada. Próximamente podrás exportar tus gastos a un archivo CSV.'
-    );
+    if (userExpenses.length === 0) {
+      message.info('No tienes gastos para exportar todavía.');
+      return;
+    }
+    const header = ['Fecha', 'Grupo', 'Descripción', 'Categoría', 'Monto', 'Moneda', 'Pagado por'];
+    const rows = userExpenses
+      .slice()
+      .sort((a, b) => b.date - a.date)
+      .map((expense) => {
+        const group = groups.find((g) => g.id === expense.groupId);
+        return [
+          new Date(expense.date).toISOString().slice(0, 10),
+          group?.name ?? '',
+          expense.description,
+          expense.category,
+          expense.amount.toFixed(2),
+          expense.currency,
+          expense.paidBy === currentUser?.uid ? 'Yo' : expense.paidBy,
+        ]
+          .map((field) => escapeCsvField(String(field)))
+          .join(',');
+      });
+    const csv = [header.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `gastos-compartidos-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
-  const handleClearLocalData = async () => {
-    setIsClearing(true);
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
     try {
-      await resetDatabase();
-      clearUser();
-      setClearDialogVisible(false);
-    } catch (err) {
-      Alert.alert('Error', 'No pudimos limpiar tus datos locales. Inténtalo de nuevo.');
+      await signOut();
+      navigate('/login', { replace: true });
     } finally {
-      setIsClearing(false);
+      setIsSigningOut(false);
     }
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text variant="headlineSmall" style={styles.title}>
-          Perfil
-        </Text>
+    <div style={{ padding: 16, paddingBottom: 32 }}>
+      <Typography.Title level={1} style={{ fontSize: 22, marginBottom: 24 }}>
+        Perfil
+      </Typography.Title>
 
-        <View style={styles.profileHeader}>
-          {currentUser && <Avatar emoji={currentUser.emoji} color={currentUser.avatarColor} size={72} />}
-          <View style={styles.profileInfo}>
-            {isEditing ? (
-              <TextInput
-                value={nameDraft}
-                onChangeText={setNameDraft}
-                mode="outlined"
-                dense
-                style={styles.nameInput}
-                onSubmitEditing={handleSaveName}
-              />
-            ) : (
-              <Text variant="titleLarge">{currentUser?.name ?? 'Usuario'}</Text>
-            )}
-            <Button
-              mode="text"
-              compact
-              onPress={() => (isEditing ? handleSaveName() : setIsEditing(true))}
-            >
-              {isEditing ? 'Guardar' : 'Editar nombre'}
-            </Button>
-          </View>
-        </View>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+        {currentUser && <Avatar emoji={currentUser.emoji} color={currentUser.avatarColor} size={72} />}
+        <div style={{ flex: 1 }}>
+          {isEditing ? (
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+              style={{ marginBottom: 4, padding: '4px 8px', fontSize: 16, width: '100%' }}
+            />
+          ) : (
+            <Typography.Text style={{ fontSize: 18 }}>{currentUser?.name ?? 'Usuario'}</Typography.Text>
+          )}
+          <Button type="text" size="small" onClick={() => (isEditing ? handleSaveName() : setIsEditing(true))}>
+            {isEditing ? 'Guardar' : 'Editar nombre'}
+          </Button>
+        </div>
+      </div>
 
-        <Card style={styles.statsCard} mode="outlined">
-          <Card.Content style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text variant="titleMedium">{mockStats.totalGroups}</Text>
-              <Text variant="bodySmall" style={styles.statLabel}>Grupos</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text variant="titleMedium">{mockStats.totalExpenses}</Text>
-              <Text variant="bodySmall" style={styles.statLabel}>Gastos</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text variant="titleMedium">S/.{mockStats.totalSpent}</Text>
-              <Text variant="bodySmall" style={styles.statLabel}>Total</Text>
-            </View>
-          </Card.Content>
-        </Card>
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: Object.keys(spentByCurrency).length > 0 ? 12 : 0 }}>
+          <div style={{ textAlign: 'center', flex: 1 }}>
+            <Typography.Title level={4} style={{ margin: 0 }}>
+              {realGroups.length}
+            </Typography.Title>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Grupos
+            </Typography.Text>
+          </div>
+          <div style={{ textAlign: 'center', flex: 1 }}>
+            <Typography.Title level={4} style={{ margin: 0 }}>
+              {userExpenses.length}
+            </Typography.Title>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Gastos
+            </Typography.Text>
+          </div>
+        </div>
+        {Object.entries(spentByCurrency).map(([currency, amount]) => (
+          <div key={currency} style={{ textAlign: 'center' }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Pagado por ti en {currency}: <strong>{formatMoney(amount, currency)}</strong>
+            </Typography.Text>
+          </div>
+        ))}
+      </Card>
 
-        <Card style={styles.optionCard} mode="outlined">
-          <Card.Content style={styles.optionRow}>
-            <Text variant="bodyMedium">Tema oscuro</Text>
-            <Switch value={themePreference === 'dark'} onValueChange={toggleTheme} />
-          </Card.Content>
-        </Card>
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Tema oscuro</span>
+          <Switch checked={themePreference === 'dark'} onChange={toggleTheme} />
+        </div>
+      </Card>
 
-        <Button mode="outlined" onPress={handleExportCSV} style={styles.actionButton} icon="file-export">
-          Exportar gastos a CSV
-        </Button>
+      <Button icon={<ExportOutlined />} block onClick={handleExportCSV} style={{ marginBottom: 12 }}>
+        Exportar gastos a CSV
+      </Button>
 
-        <Button
-          mode="outlined"
-          onPress={() => setClearDialogVisible(true)}
-          style={styles.actionButton}
-          textColor={theme.colors.error}
-          icon="trash-can-outline"
-        >
-          Limpiar datos locales
-        </Button>
-      </ScrollView>
-
-      <Portal>
-        <Dialog visible={clearDialogVisible} onDismiss={() => setClearDialogVisible(false)}>
-          <Dialog.Title>Limpiar datos locales</Dialog.Title>
-          <Dialog.Content>
-            <Text variant="bodyMedium">
-              Esto borrará todos tus grupos, gastos y tu perfil guardados en este dispositivo. Esta acción no se puede deshacer.
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setClearDialogVisible(false)}>Cancelar</Button>
-            <Button onPress={handleClearLocalData} loading={isClearing} textColor={theme.colors.error}>
-              Borrar todo
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    </SafeAreaView>
+      <Button
+        danger
+        icon={<LogoutOutlined />}
+        block
+        onClick={handleSignOut}
+        loading={isSigningOut}
+        style={{ marginBottom: 12 }}
+      >
+        Cerrar sesión
+      </Button>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  title: {
-    marginBottom: 24,
-    fontWeight: '700',
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 24,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  nameInput: {
-    marginBottom: 4,
-  },
-  statsCard: {
-    marginBottom: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statLabel: {
-    opacity: 0.6,
-    marginTop: 2,
-  },
-  optionCard: {
-    marginBottom: 16,
-  },
-  optionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  actionButton: {
-    marginBottom: 12,
-  },
-});

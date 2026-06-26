@@ -1,144 +1,82 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
-import type { RootStackParamList } from '../../../app/navigation/types';
-import { signInWithGoogle, signInWithPassword } from '../../../services/supabase/auth';
+import { Alert, Button, Form, Input, Typography } from 'antd';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { signInWithPassword } from '../../../services/supabase/auth';
+import { joinGroupByInviteToken } from '../../../services/supabase/api';
+import { useAuthStore } from '../../../store/authStore';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
+interface FormValues {
+  email: string;
+  password: string;
+}
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-export function LoginScreen({ navigation }: Props) {
-  const theme = useTheme();
-
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export function LoginScreen() {
+  const navigate = useNavigate();
+  const pendingInviteToken = useAuthStore((s) => s.pendingInviteToken);
+  const setPendingInviteToken = useAuthStore((s) => s.setPendingInviteToken);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const isValid = EMAIL_REGEX.test(email.trim()) && password.length >= 6;
-
-  const handleSubmit = async () => {
-    if (!isValid) return;
+  const handleSubmit = async (values: FormValues) => {
     setError('');
     setIsSubmitting(true);
     try {
-      await signInWithPassword(email.trim(), password);
-      // El listener de onAuthStateChange en App.tsx se encarga del resto.
-    } catch (err) {
+      await signInWithPassword(values.email.trim(), values.password);
+      if (pendingInviteToken) {
+        try {
+          await joinGroupByInviteToken(pendingInviteToken);
+        } catch {
+          // El token podría haber expirado o ya estar usado: no bloqueamos el flujo.
+        } finally {
+          setPendingInviteToken(null);
+        }
+        navigate('/app/home', { replace: true });
+      }
+      // Si no había invitación pendiente, el listener de onAuthStateChange en main.tsx se encarga del resto.
+    } catch {
       setError('No pudimos iniciar tu sesión. Revisa tu correo y contraseña.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setError('');
-    setIsGoogleSubmitting(true);
-    try {
-      await signInWithGoogle();
-      // En web esto redirige a Google; el listener de onAuthStateChange en
-      // App.tsx se encarga del resto al volver.
-    } catch (err) {
-      setError('No pudimos iniciar sesión con Google. Inténtalo de nuevo.');
-    } finally {
-      setIsGoogleSubmitting(false);
-    }
-  };
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <Text variant="headlineSmall" style={styles.title}>
-            Inicia sesión
-          </Text>
+    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 400 }}>
+        <Typography.Title level={3} style={{ marginBottom: 24 }}>
+          Inicia sesión
+        </Typography.Title>
 
-          <TextInput
+        <Form layout="vertical" onFinish={handleSubmit} disabled={isSubmitting}>
+          <Form.Item
+            name="email"
             label="Correo"
-            value={email}
-            onChangeText={setEmail}
-            mode="outlined"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={styles.input}
-          />
+            rules={[{ required: true, type: 'email', message: 'Ingresa un correo válido' }]}
+          >
+            <Input autoComplete="email" inputMode="email" />
+          </Form.Item>
 
-          <TextInput
+          <Form.Item
+            name="password"
             label="Contraseña"
-            value={password}
-            onChangeText={setPassword}
-            mode="outlined"
-            secureTextEntry
-            style={styles.input}
-          />
-
-          {error.length > 0 && <HelperText type="error">{error}</HelperText>}
-
-          <Button
-            mode="contained"
-            onPress={handleSubmit}
-            disabled={!isValid || isSubmitting}
-            loading={isSubmitting}
-            style={styles.submitButton}
-            contentStyle={styles.submitButtonContent}
+            rules={[{ required: true, min: 6, message: 'Mínimo 6 caracteres' }]}
           >
-            Entrar
-          </Button>
+            <Input.Password autoComplete="current-password" />
+          </Form.Item>
 
-          <Button mode="text" onPress={() => navigation.navigate('SignUp')} style={styles.linkButton}>
-            ¿No tienes cuenta? Crea una
-          </Button>
+          {error.length > 0 && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
 
-          <Button
-            mode="outlined"
-            icon="google"
-            onPress={handleGoogleSignIn}
-            disabled={isSubmitting || isGoogleSubmitting}
-            loading={isGoogleSubmitting}
-            style={styles.googleButton}
-            contentStyle={styles.submitButtonContent}
-          >
-            Continuar con Google
-          </Button>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={isSubmitting} style={{ height: 48 }}>
+              Entrar
+            </Button>
+          </Form.Item>
+        </Form>
+
+        <Button type="text" block onClick={() => navigate('/signup')} style={{ marginTop: 8 }}>
+          ¿No tienes cuenta? Crea una
+        </Button>
+      </div>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  title: {
-    marginBottom: 24,
-    fontWeight: '700',
-  },
-  input: {
-    marginBottom: 16,
-  },
-  submitButton: {
-    marginTop: 8,
-  },
-  submitButtonContent: {
-    height: 48,
-  },
-  linkButton: {
-    marginTop: 8,
-  },
-  googleButton: {
-    marginTop: 16,
-  },
-});

@@ -1,5 +1,5 @@
 import { getSupabase } from './client';
-import type { Expense, Group, Split, User } from '../../shared/types';
+import type { Comment, Expense, Group, Split, User } from '../../shared/types';
 
 /**
  * CRUD real contra Supabase (Postgres + RLS). Reemplaza los helpers de
@@ -61,6 +61,8 @@ interface GroupRow {
   created_by: string;
   invite_token: string;
   created_at: string;
+  is_direct: boolean;
+  archived: boolean;
 }
 
 function groupRowToGroup(row: GroupRow, memberIds: string[]): Group {
@@ -73,6 +75,8 @@ function groupRowToGroup(row: GroupRow, memberIds: string[]): Group {
     createdBy: row.created_by,
     memberIds,
     inviteToken: row.invite_token,
+    isDirect: row.is_direct,
+    archived: row.archived,
   };
 }
 
@@ -81,10 +85,10 @@ function groupRowToGroup(row: GroupRow, memberIds: string[]): Group {
  * `inviteToken` real generado por el default de la tabla), para que el
  * caller pueda renderizar el link de invitación inmediatamente.
  */
-export async function createGroup(group: Omit<Group, 'memberIds' | 'inviteToken'>): Promise<Group> {
+export async function createGroup(group: Omit<Group, 'memberIds' | 'inviteToken' | 'archived'>): Promise<Group> {
   const supabase = getSupabase();
   if (!supabase) {
-    return { ...group, memberIds: [group.createdBy], inviteToken: '' };
+    return { ...group, memberIds: [group.createdBy], inviteToken: '', archived: false };
   }
 
   const { data, error: groupError } = await supabase
@@ -95,6 +99,7 @@ export async function createGroup(group: Omit<Group, 'memberIds' | 'inviteToken'
       emoji: group.emoji,
       currency: group.currency,
       created_by: group.createdBy,
+      is_direct: group.isDirect,
     })
     .select()
     .single();
@@ -119,6 +124,7 @@ export async function upsertGroupDoc(group: Group): Promise<void> {
     emoji: group.emoji,
     currency: group.currency,
     created_by: group.createdBy,
+    is_direct: group.isDirect,
   });
   if (error) throw error;
 }
@@ -155,6 +161,54 @@ export async function upsertExpenseDoc(expense: Expense): Promise<void> {
   }
 }
 
+export async function updateGroup(
+  groupId: string,
+  fields: { name: string; emoji: string; currency: string }
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('groups')
+    .update({ name: fields.name, emoji: fields.emoji, currency: fields.currency })
+    .eq('id', groupId);
+  if (error) throw error;
+}
+
+export async function setGroupArchived(groupId: string, archived: boolean): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.from('groups').update({ archived }).eq('id', groupId);
+  if (error) throw error;
+}
+
+/**
+ * Elimina un grupo y todos sus datos asociados (gastos, splits, comentarios,
+ * miembros, transacciones) vía la RPC `delete_group` (SECURITY DEFINER), que
+ * valida que el caller sea el creador del grupo antes de borrar. Esto evita
+ * tener que otorgar políticas RLS de DELETE más amplias en las tablas hijas.
+ */
+export async function deleteGroup(groupId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.rpc('delete_group', { p_group_id: groupId });
+  if (error) throw error;
+}
+
+export async function leaveGroup(groupId: string, userId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
 export async function joinGroup(groupId: string, userId: string): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -170,6 +224,7 @@ interface ResolveInviteTokenRow {
   name: string;
   emoji: string;
   currency: string;
+  is_direct: boolean;
 }
 
 /**
@@ -179,7 +234,7 @@ interface ResolveInviteTokenRow {
  */
 export async function resolveInviteToken(
   token: string
-): Promise<{ id: string; name: string; emoji: string; currency: string } | null> {
+): Promise<{ id: string; name: string; emoji: string; currency: string; isDirect: boolean } | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
@@ -190,7 +245,7 @@ export async function resolveInviteToken(
   if (rows.length === 0) return null;
 
   const row = rows[0];
-  return { id: row.id, name: row.name, emoji: row.emoji, currency: row.currency };
+  return { id: row.id, name: row.name, emoji: row.emoji, currency: row.currency, isDirect: row.is_direct };
 }
 
 /**
@@ -253,6 +308,9 @@ interface ExpenseRow {
   notes: string | null;
   created_by: string;
   created_at: string;
+  recurrence_rule: string | null;
+  next_occurrence_date: string | null;
+  receipt_url: string | null;
 }
 
 interface SplitRow {
@@ -281,6 +339,9 @@ function rowsToExpense(row: ExpenseRow, splitRows: SplitRow[]): Expense {
     createdBy: row.created_by,
     createdAt: new Date(row.created_at).getTime(),
     syncStatus: 'synced',
+    recurrenceRule: (row.recurrence_rule as Expense['recurrenceRule']) ?? null,
+    nextOccurrenceDate: row.next_occurrence_date ? new Date(row.next_occurrence_date).getTime() : null,
+    receiptUrl: row.receipt_url ?? null,
   };
 }
 
@@ -299,6 +360,11 @@ export async function createExpense(expense: Expense): Promise<void> {
     expense_date: new Date(expense.date).toISOString().slice(0, 10),
     notes: expense.notes,
     created_by: expense.createdBy,
+    recurrence_rule: expense.recurrenceRule,
+    next_occurrence_date: expense.nextOccurrenceDate
+      ? new Date(expense.nextOccurrenceDate).toISOString().slice(0, 10)
+      : null,
+    receipt_url: expense.receiptUrl,
   });
   if (expenseError) throw expenseError;
 
@@ -313,6 +379,98 @@ export async function createExpense(expense: Expense): Promise<void> {
     );
     if (splitsError) throw splitsError;
   }
+}
+
+export async function updateExpense(expense: Expense): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error: expenseError } = await supabase
+    .from('expenses')
+    .update({
+      description: expense.description,
+      amount: expense.amount,
+      currency: expense.currency,
+      paid_by: expense.paidBy,
+      category: expense.category,
+      expense_date: new Date(expense.date).toISOString().slice(0, 10),
+      notes: expense.notes,
+      recurrence_rule: expense.recurrenceRule,
+      next_occurrence_date: expense.nextOccurrenceDate
+        ? new Date(expense.nextOccurrenceDate).toISOString().slice(0, 10)
+        : null,
+      receipt_url: expense.receiptUrl,
+    })
+    .eq('id', expense.id);
+  if (expenseError) throw expenseError;
+
+  const { error: deleteSplitsError } = await supabase.from('splits').delete().eq('expense_id', expense.id);
+  if (deleteSplitsError) throw deleteSplitsError;
+
+  if (expense.splits.length > 0) {
+    const { error: splitsError } = await supabase.from('splits').insert(
+      expense.splits.map((s) => ({
+        expense_id: expense.id,
+        user_id: s.userId,
+        amount: s.amount,
+        percentage: s.percentage,
+      }))
+    );
+    if (splitsError) throw splitsError;
+  }
+}
+
+/** Avanza la fecha de próxima ocurrencia de una plantilla recurrente tras generar una instancia. */
+export async function advanceRecurrence(expenseId: string, nextOccurrenceDate: number): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('expenses')
+    .update({ next_occurrence_date: new Date(nextOccurrenceDate).toISOString().slice(0, 10) })
+    .eq('id', expenseId);
+  if (error) throw error;
+}
+
+export async function deleteExpense(expenseId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error: splitsError } = await supabase.from('splits').delete().eq('expense_id', expenseId);
+  if (splitsError) throw splitsError;
+
+  const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+  if (error) throw error;
+}
+
+/**
+ * Sube la foto de un recibo al bucket privado `receipts`, bajo `${groupId}/...` para que
+ * las policies de RLS puedan restringir el acceso a miembros del grupo. Devuelve el `path`
+ * de storage (no una URL pública); usar `getReceiptUrl` para resolverlo a una URL firmada.
+ */
+export async function uploadReceipt(groupId: string, expenseId: string, file: File): Promise<string> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase no configurado');
+
+  const extension = file.name.split('.').pop() ?? 'jpg';
+  const path = `${groupId}/${expenseId}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('receipts')
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (uploadError) throw uploadError;
+
+  return path;
+}
+
+/** Resuelve un `path` de storage de `receipts` a una URL firmada de acceso temporal. */
+export async function getReceiptUrl(path: string): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase.storage.from('receipts').createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data?.signedUrl ?? null;
 }
 
 export async function fetchExpensesForGroup(groupId: string): Promise<Expense[]> {
@@ -338,4 +496,57 @@ export async function fetchExpensesForGroup(groupId: string): Promise<Expense[]>
   }
 
   return (expenseRows ?? []).map((row) => rowsToExpense(row as ExpenseRow, splitRows));
+}
+
+interface CommentRow {
+  id: string;
+  expense_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+}
+
+function commentRowToComment(row: CommentRow): Comment {
+  return {
+    id: row.id,
+    expenseId: row.expense_id,
+    userId: row.user_id,
+    body: row.body,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+export async function fetchCommentsForExpense(expenseId: string): Promise<Comment[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('comments')
+    .select('*')
+    .eq('expense_id', expenseId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+
+  return (data ?? []).map((row) => commentRowToComment(row as CommentRow));
+}
+
+export async function createComment(comment: Comment): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.from('comments').insert({
+    id: comment.id,
+    expense_id: comment.expenseId,
+    user_id: comment.userId,
+    body: comment.body,
+  });
+  if (error) throw error;
+}
+
+export async function deleteComment(commentId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.from('comments').delete().eq('id', commentId);
+  if (error) throw error;
 }

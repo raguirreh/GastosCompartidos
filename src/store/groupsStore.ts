@@ -1,8 +1,12 @@
-import { Platform } from 'react-native';
 import { create } from 'zustand';
-import { insertGroup } from '../services/database/groupsRepository';
-import { enqueueOutboxItem } from '../services/database/outboxRepository';
-import { createGroup as createGroupRemote, fetchGroupsForUser } from '../services/supabase/api';
+import {
+  createGroup as createGroupRemote,
+  deleteGroup as deleteGroupRemote,
+  fetchGroupsForUser,
+  leaveGroup as leaveGroupRemote,
+  setGroupArchived as setGroupArchivedRemote,
+  updateGroup as updateGroupRemote,
+} from '../services/supabase/api';
 import type { Group } from '../shared/types';
 import { generateUUID } from '../shared/utils/uuid';
 
@@ -11,6 +15,7 @@ interface CreateGroupInput {
   emoji: string;
   currency: string;
   createdBy: string;
+  isDirect?: boolean;
 }
 
 interface GroupsState {
@@ -19,6 +24,10 @@ interface GroupsState {
   setGroups: (groups: Group[]) => void;
   fetchGroups: (userId: string) => Promise<void>;
   createGroup: (input: CreateGroupInput) => Promise<Group>;
+  updateGroup: (groupId: string, fields: { name: string; emoji: string; currency: string }) => Promise<void>;
+  leaveGroup: (groupId: string, userId: string) => Promise<void>;
+  setGroupArchived: (groupId: string, archived: boolean) => Promise<void>;
+  deleteGroup: (groupId: string) => Promise<void>;
   addMember: (groupId: string, userId: string) => void;
   getGroupById: (groupId: string) => Group | undefined;
 }
@@ -40,38 +49,42 @@ export const useGroupsStore = create<GroupsState>((set, get) => ({
   },
 
   createGroup: async (input) => {
-    if (Platform.OS === 'web') {
-      const newGroup = await createGroupRemote({
-        id: generateUUID(),
-        name: input.name,
-        emoji: input.emoji,
-        currency: input.currency,
-        createdAt: Date.now(),
-        createdBy: input.createdBy,
-      });
-
-      set((state) => ({ groups: [newGroup, ...state.groups] }));
-      return newGroup;
-    }
-
-    const newGroup: Group = {
+    const newGroup = await createGroupRemote({
       id: generateUUID(),
       name: input.name,
       emoji: input.emoji,
       currency: input.currency,
       createdAt: Date.now(),
       createdBy: input.createdBy,
-      memberIds: [input.createdBy],
-      inviteToken: '',
-    };
+      isDirect: input.isDirect ?? false,
+    });
 
     set((state) => ({ groups: [newGroup, ...state.groups] }));
-
-    // Persistimos en SQLite (fuente de verdad) y encolamos para sync.
-    await insertGroup(newGroup);
-    await enqueueOutboxItem('create_group', newGroup);
-
     return newGroup;
+  },
+
+  updateGroup: async (groupId, fields) => {
+    await updateGroupRemote(groupId, fields);
+    set((state) => ({
+      groups: state.groups.map((group) => (group.id === groupId ? { ...group, ...fields } : group)),
+    }));
+  },
+
+  leaveGroup: async (groupId, userId) => {
+    await leaveGroupRemote(groupId, userId);
+    set((state) => ({ groups: state.groups.filter((g) => g.id !== groupId) }));
+  },
+
+  setGroupArchived: async (groupId, archived) => {
+    await setGroupArchivedRemote(groupId, archived);
+    set((state) => ({
+      groups: state.groups.map((g) => (g.id === groupId ? { ...g, archived } : g)),
+    }));
+  },
+
+  deleteGroup: async (groupId) => {
+    await deleteGroupRemote(groupId);
+    set((state) => ({ groups: state.groups.filter((g) => g.id !== groupId) }));
   },
 
   addMember: (groupId, userId) =>

@@ -1,21 +1,24 @@
-import { MD3DarkTheme, MD3LightTheme, type MD3Theme } from 'react-native-paper';
+import type { ThemeConfig } from 'antd';
 import { darkColors, lightColors } from './colors';
 
-export const lightTheme: MD3Theme = {
-  ...MD3LightTheme,
-  colors: {
-    ...MD3LightTheme.colors,
-    ...lightColors,
-  },
-};
+function buildTheme(colors: typeof lightColors): ThemeConfig {
+  return {
+    token: {
+      colorPrimary: colors.primary,
+      colorSuccess: colors.tertiary,
+      colorError: colors.error,
+      colorBgContainer: colors.surface,
+      colorBgLayout: colors.background,
+      colorText: colors.onBackground,
+      colorTextSecondary: colors.onSurfaceVariant,
+      colorBorder: colors.outlineVariant,
+      borderRadius: 12,
+    },
+  };
+}
 
-export const darkTheme: MD3Theme = {
-  ...MD3DarkTheme,
-  colors: {
-    ...MD3DarkTheme.colors,
-    ...darkColors,
-  },
-};
+export const lightTheme = buildTheme(lightColors);
+export const darkTheme = buildTheme(darkColors);
 
 /** Colores semánticos para saldos, independientes del tema actual. */
 export const balanceColors = {
@@ -24,6 +27,6 @@ export const balanceColors = {
   neutral: '#9AA5B1',
 };
 
-export function getTheme(scheme: 'light' | 'dark'): MD3Theme {
+export function getTheme(scheme: 'light' | 'dark'): ThemeConfig {
   return scheme === 'dark' ? darkTheme : lightTheme;
 }

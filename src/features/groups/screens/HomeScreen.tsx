@@ -1,25 +1,18 @@
-import React, { useEffect, useMemo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, FAB, Text, useTheme } from 'react-native-paper';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { CompositeScreenProps } from '@react-navigation/native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { MainTabParamList } from '../../../app/navigation/types';
-import type { GroupsStackParamList } from '../../../app/navigation/types';
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { Button, Card, Typography } from 'antd';
+import { useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
 import { OnlineIndicator } from '../../../shared/components/OnlineIndicator';
 import { computeGroupSettlements } from '../../../shared/utils/debtSimplification';
 import { formatMoney, formatRelativeDate, getCurrencySymbol } from '../../../shared/utils/format';
-import { useExpensesStore, useGroupsStore, useProfilesStore, useUserStore } from '../../../store';
+import { useExpensesStore } from '../../../store/expensesStore';
+import { useGroupsStore } from '../../../store/groupsStore';
+import { useProfilesStore } from '../../../store/profilesStore';
+import { useUserStore } from '../../../store/userStore';
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<MainTabParamList, 'Home'>,
-  NativeStackScreenProps<GroupsStackParamList>
->;
-
-export function HomeScreen({ navigation }: Props) {
-  const theme = useTheme();
+export function HomeScreen() {
+  const navigate = useNavigate();
   const currentUser = useUserStore((s) => s.currentUser);
   const groups = useGroupsStore((s) => s.groups);
   const fetchGroups = useGroupsStore((s) => s.fetchGroups);
@@ -51,12 +44,13 @@ export function HomeScreen({ navigation }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups]);
 
+  const realGroups = useMemo(() => groups.filter((g) => !g.isDirect && !g.archived), [groups]);
+
   const allExpenses = useMemo(() => Object.values(expensesByGroup).flat(), [expensesByGroup]);
 
-  const { owed, owe, net } = useMemo(() => {
-    if (!currentUser) return { owed: 0, owe: 0, net: 0 };
-    let totalOwed = 0;
-    let totalOwe = 0;
+  const balancesByCurrency = useMemo(() => {
+    const result: Record<string, { owed: number; owe: number }> = {};
+    if (!currentUser) return result;
     for (const group of groups) {
       const expenses = expensesByGroup[group.id] ?? [];
       const settlements = computeGroupSettlements(
@@ -66,13 +60,20 @@ export function HomeScreen({ navigation }: Props) {
           splits: expense.splits.map((s) => ({ userId: s.userId, amount: s.amount })),
         }))
       );
+      const bucket = result[group.currency] ?? { owed: 0, owe: 0 };
       for (const settlement of settlements) {
-        if (settlement.toUserId === currentUser.uid) totalOwed += settlement.amount;
-        if (settlement.fromUserId === currentUser.uid) totalOwe += settlement.amount;
+        if (settlement.toUserId === currentUser.uid) bucket.owed += settlement.amount;
+        if (settlement.fromUserId === currentUser.uid) bucket.owe += settlement.amount;
       }
+      result[group.currency] = bucket;
     }
-    return { owed: totalOwed, owe: totalOwe, net: totalOwed - totalOwe };
+    return result;
   }, [groups, expensesByGroup, currentUser]);
+
+  const currencyEntries = useMemo(
+    () => Object.entries(balancesByCurrency).filter(([, b]) => b.owed !== 0 || b.owe !== 0),
+    [balancesByCurrency]
+  );
 
   const recentActivity = useMemo(
     () => [...allExpenses].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4),
@@ -80,199 +81,144 @@ export function HomeScreen({ navigation }: Props) {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} role="main">
-        <View style={styles.header} role="banner">
-          <View>
-            <Text variant="titleMedium" accessibilityRole="header" aria-level={1}>
-              Hola, {currentUser?.name ?? 'Usuario'} {currentUser?.emoji}
-            </Text>
-            <Text variant="bodySmall" style={styles.headerSubtitle}>
-              Esto es lo que pasa con tu dinero
-            </Text>
-          </View>
-          <OnlineIndicator />
-        </View>
+    <div style={{ padding: 16, paddingBottom: 96 }} role="main">
+      <div
+        role="banner"
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}
+      >
+        <div>
+          <Typography.Title level={1} style={{ fontSize: 18, margin: 0 }}>
+            Hola, {currentUser?.name ?? 'Usuario'} {currentUser?.emoji}
+          </Typography.Title>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Esto es lo que pasa con tu dinero
+          </Typography.Text>
+        </div>
+        <Button
+          type="text"
+          icon={<SearchOutlined />}
+          aria-label="Buscar gastos"
+          onClick={() => navigate('/app/search')}
+        />
+        <OnlineIndicator />
+      </div>
 
-        <Card style={styles.balanceCard} mode="contained">
-          <Card.Content>
-            <Text variant="labelLarge" style={styles.balanceLabel}>
-              Tu balance neto
-            </Text>
-            <Text
-              variant="displaySmall"
-              style={{ color: net >= 0 ? theme.colors.tertiary : theme.colors.error, fontWeight: '700' }}
-            >
-              <Text aria-hidden importantForAccessibility="no">{net >= 0 ? '↑ ' : '↓ '}</Text>
-              {formatMoney(net, 'PEN')} {net >= 0 ? '(a tu favor)' : '(debes)'}
-            </Text>
-            <View style={styles.balanceRow}>
-              <View style={styles.balanceItem}>
-                <Text variant="bodySmall" style={styles.balanceItemLabel}>Te deben</Text>
-                <Text variant="titleMedium" style={{ color: theme.colors.tertiary }}>
-                  <Text aria-hidden importantForAccessibility="no">↑ </Text>
-                  {formatMoney(owed, 'PEN')} (a tu favor)
-                </Text>
-              </View>
-              <View style={styles.balanceItem}>
-                <Text variant="bodySmall" style={styles.balanceItemLabel}>Debes</Text>
-                <Text variant="titleMedium" style={{ color: theme.colors.error }}>
-                  <Text aria-hidden importantForAccessibility="no">↓ </Text>
-                  {formatMoney(owe, 'PEN')} (debes)
-                </Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-
-        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
-          Tus grupos
-        </Text>
-        {groups.length === 0 ? (
-          <Text style={styles.emptyText}>Todavía no tienes grupos. Crea uno para empezar.</Text>
+      <Card style={{ marginBottom: 24 }}>
+        <Typography.Text type="secondary">Tu balance neto</Typography.Text>
+        {currencyEntries.length === 0 ? (
+          <Typography.Title level={2} style={{ margin: 0 }}>
+            {formatMoney(0, 'PEN')}
+          </Typography.Title>
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.groupsRow}>
-            {groups.map((group) => (
-              <Card
-                key={group.id}
-                style={styles.groupCard}
-                onPress={() => navigation.navigate('Groups', { screen: 'GroupDetail', params: { groupId: group.id } } as never)}
-                accessibilityRole="button"
-                accessibilityLabel={`${group.name}, ${group.memberIds.length} miembros`}
-              >
-                <Card.Content>
-                  <Text style={styles.groupEmoji} aria-hidden importantForAccessibility="no">{group.emoji}</Text>
-                  <Text variant="titleSmall" numberOfLines={1}>
-                    {group.name}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.groupMembers}>
-                    {group.memberIds.length} miembros
-                  </Text>
-                </Card.Content>
-              </Card>
-            ))}
-          </ScrollView>
+          currencyEntries.map(([currency, { owed, owe }]) => {
+            const net = owed - owe;
+            return (
+              <div key={currency} style={{ marginBottom: 8 }}>
+                <Typography.Title
+                  level={2}
+                  style={{
+                    margin: 0,
+                    color: net >= 0 ? 'var(--ant-color-success, #52c41a)' : 'var(--ant-color-error, #ff4d4f)',
+                  }}
+                >
+                  <span aria-hidden="true">{net >= 0 ? '↑ ' : '↓ '}</span>
+                  {formatMoney(net, currency)} {net >= 0 ? '(a tu favor)' : '(debes)'}
+                </Typography.Title>
+                <div style={{ display: 'flex', gap: 24, marginTop: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      Te deben
+                    </Typography.Text>
+                    <div style={{ color: 'var(--ant-color-success, #52c41a)', fontWeight: 600 }}>
+                      <span aria-hidden="true">↑ </span>
+                      {formatMoney(owed, currency)}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      Debes
+                    </Typography.Text>
+                    <div style={{ color: 'var(--ant-color-error, #ff4d4f)', fontWeight: 600 }}>
+                      <span aria-hidden="true">↓ </span>
+                      {formatMoney(owe, currency)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
         )}
+      </Card>
 
-        <Text variant="titleMedium" style={styles.sectionTitle} accessibilityRole="header" aria-level={2}>
-          Actividad reciente
-        </Text>
-        {recentActivity.length === 0 && (
-          <Text style={styles.emptyText}>Todavía no hay actividad.</Text>
-        )}
-        {recentActivity.map((expense) => {
-          const payer = profiles[expense.paidBy];
-          const group = groups.find((g) => g.id === expense.groupId);
-          return (
-            <Card key={expense.id} style={styles.activityCard} mode="outlined">
-              <Card.Content style={styles.activityContent}>
-                {payer && <Avatar emoji={payer.emoji} color={payer.avatarColor} size={36} />}
-                <View style={styles.activityTextWrapper}>
-                  <Text variant="bodyMedium" numberOfLines={1}>
-                    {payer?.name ?? 'Alguien'} pagó <Text style={{ fontWeight: '700' }}>{expense.description}</Text>
-                  </Text>
-                  <Text variant="bodySmall" style={styles.activitySubtext}>
-                    {group?.name} · {formatRelativeDate(expense.createdAt)}
-                  </Text>
-                </View>
-                <Text variant="titleSmall">{getCurrencySymbol(expense.currency)}{expense.amount.toFixed(2)}</Text>
-              </Card.Content>
+      <Typography.Title level={2} style={{ fontSize: 16, marginBottom: 12 }}>
+        Tus grupos
+      </Typography.Title>
+      {realGroups.length === 0 ? (
+        <Typography.Text type="secondary">Todavía no tienes grupos. Crea uno para empezar.</Typography.Text>
+      ) : (
+        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', marginBottom: 24 }}>
+          {realGroups.map((group) => (
+            <Card
+              key={group.id}
+              hoverable
+              onClick={() => navigate(`/app/groups/${group.id}`)}
+              role="button"
+              aria-label={`${group.name}, ${group.memberIds.length} miembros`}
+              style={{ minWidth: 140 }}
+            >
+              <div style={{ fontSize: 28, marginBottom: 4 }} aria-hidden="true">
+                {group.emoji}
+              </div>
+              <Typography.Text strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {group.name}
+              </Typography.Text>
+              <div style={{ fontSize: 12, opacity: 0.6 }}>{group.memberIds.length} miembros</div>
             </Card>
-          );
-        })}
-      </ScrollView>
+          ))}
+        </div>
+      )}
 
-      {groups.length > 0 && (
-        <FAB
-          icon="plus"
-          label="Gasto"
-          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-          color="#FFFFFF"
-          onPress={() =>
-            navigation.navigate('Groups', { screen: 'AddExpense', params: { groupId: groups[0].id } } as never)
-          }
+      <Typography.Title level={2} style={{ fontSize: 16, marginBottom: 12 }}>
+        Actividad reciente
+      </Typography.Title>
+      {recentActivity.length === 0 && (
+        <Typography.Text type="secondary">Todavía no hay actividad.</Typography.Text>
+      )}
+      {recentActivity.map((expense) => {
+        const payer = profiles[expense.paidBy];
+        const group = groups.find((g) => g.id === expense.groupId);
+        return (
+          <Card key={expense.id} size="small" style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {payer && <Avatar emoji={payer.emoji} color={payer.avatarColor} size={36} />}
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {payer?.name ?? 'Alguien'} pagó <strong>{expense.description}</strong>
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.6 }}>
+                  {group?.name} · {formatRelativeDate(expense.createdAt)}
+                </div>
+              </div>
+              <Typography.Text strong>
+                {getCurrencySymbol(expense.currency)}
+                {expense.amount.toFixed(2)}
+              </Typography.Text>
+            </div>
+          </Card>
+        );
+      })}
+
+      {realGroups.length > 0 && (
+        <Button
+          type="primary"
+          shape="circle"
+          icon={<PlusOutlined />}
+          size="large"
+          aria-label="Agregar gasto"
+          onClick={() => navigate(`/app/groups/${realGroups[0].id}/add-expense`)}
+          style={{ position: 'fixed', right: 16, bottom: 72, width: 56, height: 56 }}
         />
       )}
-    </SafeAreaView>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 96,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  headerSubtitle: {
-    opacity: 0.6,
-  },
-  balanceCard: {
-    marginBottom: 24,
-  },
-  balanceLabel: {
-    opacity: 0.7,
-    marginBottom: 4,
-  },
-  balanceRow: {
-    flexDirection: 'row',
-    gap: 24,
-    marginTop: 16,
-  },
-  balanceItem: {
-    flex: 1,
-  },
-  balanceItemLabel: {
-    opacity: 0.6,
-    marginBottom: 2,
-  },
-  sectionTitle: {
-    marginBottom: 12,
-    fontWeight: '700',
-  },
-  emptyText: {
-    opacity: 0.6,
-    marginBottom: 16,
-  },
-  groupsRow: {
-    marginBottom: 24,
-  },
-  groupCard: {
-    width: 140,
-    marginRight: 12,
-  },
-  groupEmoji: {
-    fontSize: 28,
-    marginBottom: 4,
-  },
-  groupMembers: {
-    opacity: 0.6,
-    marginTop: 2,
-  },
-  activityCard: {
-    marginBottom: 8,
-  },
-  activityContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  activityTextWrapper: {
-    flex: 1,
-  },
-  activitySubtext: {
-    opacity: 0.6,
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-  },
-});

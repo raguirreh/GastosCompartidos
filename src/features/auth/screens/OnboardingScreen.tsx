@@ -1,14 +1,8 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useRef, useState } from 'react';
-import { Dimensions, FlatList, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Text, useTheme } from 'react-native-paper';
-import type { RootStackParamList } from '../../../app/navigation/types';
-import { useUserStore } from '../../../store';
-
-type Props = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
-
-const { width } = Dimensions.get('window');
+import { Button, Carousel, Typography } from 'antd';
+import { useRef, useState } from 'react';
+import type { CarouselRef } from 'antd/es/carousel';
+import { useNavigate } from 'react-router-dom';
+import { useUserStore } from '../../../store/userStore';
 
 interface Slide {
   emoji: string;
@@ -34,119 +28,70 @@ const slides: Slide[] = [
   },
 ];
 
-export function OnboardingScreen({ navigation }: Props) {
-  const theme = useTheme();
+export function OnboardingScreen() {
+  const navigate = useNavigate();
   const [pageIndex, setPageIndex] = useState(0);
-  const listRef = useRef<FlatList<Slide>>(null);
+  const carouselRef = useRef<CarouselRef>(null);
   const completeOnboarding = useUserStore((s) => s.completeOnboarding);
 
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = Math.round(event.nativeEvent.contentOffset.x / width);
-    setPageIndex(index);
+  const handleFinish = () => {
+    completeOnboarding();
+    navigate('/profile-setup', { replace: true });
   };
 
   const handleNext = () => {
     if (pageIndex < slides.length - 1) {
-      const nextIndex = pageIndex + 1;
-      listRef.current?.scrollToOffset({ offset: nextIndex * width, animated: true });
-      setPageIndex(nextIndex);
+      carouselRef.current?.next();
     } else {
       handleFinish();
     }
   };
 
-  const handleFinish = () => {
-    completeOnboarding();
-    navigation.replace('Login');
-  };
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
-      <FlatList
-        ref={listRef}
-        data={slides}
-        keyExtractor={(_, index) => `slide-${index}`}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={handleScroll}
-        renderItem={({ item }) => (
-          <View style={[styles.slide, { width }]}>
-            <Text style={styles.emoji}>{item.emoji}</Text>
-            <Text variant="headlineSmall" style={styles.slideTitle}>
-              {item.title}
-            </Text>
-            <Text variant="bodyLarge" style={styles.slideDescription}>
-              {item.description}
-            </Text>
-          </View>
-        )}
-      />
-
-      <View style={styles.indicatorRow}>
-        {slides.map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.dot,
-              {
-                backgroundColor:
-                  index === pageIndex ? theme.colors.primary : theme.colors.outlineVariant,
-                width: index === pageIndex ? 20 : 8,
-              },
-            ]}
-          />
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+      }}
+    >
+      <Carousel ref={carouselRef} afterChange={setPageIndex} dots={{ className: 'onboarding-dots' }}>
+        {slides.map((slide) => (
+          <div key={slide.title}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: '70vh',
+                padding: '0 32px',
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: 96, marginBottom: 24 }}>{slide.emoji}</div>
+              <Typography.Title level={4}>{slide.title}</Typography.Title>
+              <Typography.Paragraph type="secondary">{slide.description}</Typography.Paragraph>
+            </div>
+          </div>
         ))}
-      </View>
+      </Carousel>
 
-      <View style={styles.footer}>
-        <Button mode="text" onPress={handleFinish}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          padding: '0 24px 24px',
+          marginTop: 'auto',
+        }}
+      >
+        <Button type="text" onClick={handleFinish}>
           Saltar
         </Button>
-        <Button mode="contained" onPress={handleNext}>
+        <Button type="primary" onClick={handleNext}>
           {pageIndex === slides.length - 1 ? 'Empezar' : 'Siguiente'}
         </Button>
-      </View>
-    </SafeAreaView>
+      </div>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  slide: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  emoji: {
-    fontSize: 96,
-    marginBottom: 24,
-  },
-  slideTitle: {
-    textAlign: 'center',
-    marginBottom: 12,
-    fontWeight: '700',
-  },
-  slideDescription: {
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-  indicatorRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: 16,
-  },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
-});

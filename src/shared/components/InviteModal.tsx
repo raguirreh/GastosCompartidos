@@ -1,8 +1,7 @@
-import * as Clipboard from 'expo-clipboard';
-import React, { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
-import { Button, Modal, Portal, Text, useTheme } from 'react-native-paper';
+import { CopyOutlined, ShareAltOutlined, WhatsAppOutlined } from '@ant-design/icons';
+import { Button, Modal, Typography } from 'antd';
+import { useMemo, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { buildGroupInviteLink, buildWhatsAppInviteUrl, buildWhatsAppWebInviteUrl } from '../utils/invite';
 import { openWhatsApp, shareOrCopy } from '../utils/share';
 
@@ -15,13 +14,12 @@ interface InviteModalProps {
 
 /** Modal de invitación a un grupo: link, copiar, compartir por WhatsApp, compartir nativo y QR. */
 export function InviteModal({ visible, onDismiss, inviteToken, groupName }: InviteModalProps) {
-  const theme = useTheme();
   const [copied, setCopied] = useState(false);
 
   const link = useMemo(() => buildGroupInviteLink(inviteToken), [inviteToken]);
 
   const handleCopy = async () => {
-    await Clipboard.setStringAsync(link);
+    await navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -40,64 +38,28 @@ export function InviteModal({ visible, onDismiss, inviteToken, groupName }: Invi
   };
 
   return (
-    <Portal>
-      <Modal
-        visible={visible}
-        onDismiss={onDismiss}
-        contentContainerStyle={[styles.container, { backgroundColor: theme.colors.surface }]}
-      >
-        <Text variant="titleLarge" style={styles.title}>
-          Invitar a "{groupName}"
-        </Text>
+    <Modal open={visible} onCancel={onDismiss} footer={null} centered title={`Invitar a "${groupName}"`}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+        <div style={{ padding: 12, background: '#fff', borderRadius: 12 }}>
+          <QRCodeSVG value={link} size={180} />
+        </div>
 
-        <View style={styles.qrWrapper}>
-          <QRCode value={link} size={180} color={theme.colors.onSurface} backgroundColor={theme.colors.surface} />
-        </View>
-
-        <Text variant="bodyMedium" style={styles.link} numberOfLines={2}>
+        <Typography.Text type="secondary" style={{ textAlign: 'center' }}>
           {link}
-        </Text>
+        </Typography.Text>
 
-        <Button mode="outlined" onPress={handleCopy} style={styles.button} icon="content-copy">
+        <Button icon={<CopyOutlined />} block onClick={handleCopy}>
           {copied ? 'Copiado' : 'Copiar link'}
         </Button>
 
-        <Button mode="contained" onPress={handleWhatsApp} style={styles.button} icon="whatsapp">
+        <Button type="primary" icon={<WhatsAppOutlined />} block onClick={handleWhatsApp}>
           Compartir por WhatsApp
         </Button>
 
-        <Button mode="text" onPress={handleNativeShare} style={styles.button} icon="share-variant">
+        <Button type="text" icon={<ShareAltOutlined />} block onClick={handleNativeShare}>
           Compartir...
         </Button>
-      </Modal>
-    </Portal>
+      </div>
+    </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    margin: 24,
-    padding: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  title: {
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  qrWrapper: {
-    padding: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  link: {
-    textAlign: 'center',
-    marginBottom: 16,
-    opacity: 0.7,
-  },
-  button: {
-    width: '100%',
-    marginTop: 8,
-  },
-});

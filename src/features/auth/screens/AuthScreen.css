@@ -1,0 +1,259 @@
+.authScreen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f7f7f7;
+}
+
+.authCard {
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px 28px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.authCard.transitioning {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.authLogo {
+  font-size: 40px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.authTitle {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 24px;
+  color: #222;
+}
+
+.authField {
+  margin-bottom: 16px;
+}
+
+.authLabel {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 6px;
+}
+
+.authInputRow {
+  position: relative;
+}
+
+.authInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  font-size: 15px;
+  border: 1px solid #d8d8d8;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 150ms ease;
+}
+
+.authInput:focus {
+  border-color: #ff385c;
+}
+
+.authInput.invalid {
+  border-color: #d93025;
+}
+
+.authInput:disabled {
+  background: #f2f2f2;
+  color: #777;
+}
+
+.authToggleVisibility {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #555;
+  padding: 4px 6px;
+}
+
+.authError {
+  color: #d93025;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.authButton {
+  width: 100%;
+  padding: 13px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: #ff385c;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 150ms ease, opacity 150ms ease;
+}
+
+.authButton:disabled {
+  background: #f0a8b6;
+  cursor: not-allowed;
+}
+
+.authButton:not(:disabled):hover {
+  background: #e0314f;
+}
+
+.authButtonSecondary {
+  width: 100%;
+  padding: 13px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #222;
+  background: #fff;
+  border: 1px solid #d8d8d8;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.authButtonSecondary:hover {
+  background: #f5f5f5;
+}
+
+.authDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: #999;
+  font-size: 13px;
+}
+
+.authDivider::before,
+.authDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e3e3e3;
+}
+
+.authFooter {
+  text-align: center;
+  font-size: 12px;
+  color: #888;
+  margin-top: 20px;
+  line-height: 1.5;
+}
+
+.authLink {
+  background: none;
+  border: none;
+  color: #ff385c;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.authEmailRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: 1px solid #d8d8d8;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.authEmailRowText {
+  font-size: 14px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-top-color: #fff;
+  animation: spin 700ms linear infinite;
+}
+
+.spinnerDark {
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  border-top-color: #555;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.strengthBarTrack {
+  height: 6px;
+  border-radius: 4px;
+  background: #eee;
+  overflow: hidden;
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+
+.strengthBarFill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 200ms ease, background 200ms ease;
+}
+
+.strengthChecklist {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.strengthCheckItem {
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #999;
+}
+
+.strengthCheckItem.met {
+  color: #2e9e4f;
+}
+
+.strengthCheckMark {
+  font-size: 12px;
+  width: 14px;
+  display: inline-block;
+}
+
+.fieldsRow {
+  display: flex;
+  gap: 12px;
+}
+
+.fieldsRow > .authField {
+  flex: 1;
+}

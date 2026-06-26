@@ -1,27 +1,41 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Chip, HelperText, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
-import type { GroupsStackParamList } from '../../../app/navigation/types';
+import { ArrowLeftOutlined, DeleteOutlined, PaperClipOutlined, SendOutlined } from '@ant-design/icons';
+import { Alert, Button, Input, Modal, Segmented, Select, Typography, Upload } from 'antd';
+import type { UploadRequestOption } from 'rc-upload/lib/interface';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
-import type { ExpenseCategory, SplitMode } from '../../../shared/types';
 import { mockCategories } from '../../../shared/constants/categories';
-import { formatDate } from '../../../shared/utils/format';
-import { useExpensesStore, useGroupsStore, useProfilesStore, useUserStore } from '../../../store';
+import { getReceiptUrl, uploadReceipt } from '../../../services/supabase/api';
+import type { ExpenseCategory, RecurrenceRule, SplitMode } from '../../../shared/types';
+import { formatDate, formatRelativeDate } from '../../../shared/utils/format';
+import { generateUUID } from '../../../shared/utils/uuid';
+import { useCommentsStore } from '../../../store/commentsStore';
+import { useExpensesStore } from '../../../store/expensesStore';
+import { useGroupsStore } from '../../../store/groupsStore';
+import { useProfilesStore } from '../../../store/profilesStore';
+import { useUserStore } from '../../../store/userStore';
 
-type Props = NativeStackScreenProps<GroupsStackParamList, 'AddExpense'>;
-
-export function AddExpenseScreen({ route, navigation }: Props) {
-  const theme = useTheme();
-  const { groupId } = route.params;
+export function AddExpenseScreen() {
+  const navigate = useNavigate();
+  const { groupId = '', expenseId } = useParams<{ groupId: string; expenseId?: string }>();
+  const isEditing = Boolean(expenseId);
   const currentUser = useUserStore((s) => s.currentUser);
   const addExpense = useExpensesStore((s) => s.addExpense);
+  const updateExpense = useExpensesStore((s) => s.updateExpense);
+  const deleteExpense = useExpensesStore((s) => s.deleteExpense);
+  const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
   const getGroupById = useGroupsStore((s) => s.getGroupById);
   const profiles = useProfilesStore((s) => s.profiles);
   const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
+  const commentsByExpense = useCommentsStore((s) => s.commentsByExpense);
+  const fetchComments = useCommentsStore((s) => s.fetchComments);
+  const addComment = useCommentsStore((s) => s.addComment);
 
   const group = getGroupById(groupId);
+  const existingExpense = useMemo(
+    () => (expenseId ? (expensesByGroup[groupId] ?? []).find((e) => e.id === expenseId) : undefined),
+    [expensesByGroup, groupId, expenseId]
+  );
 
   useEffect(() => {
     if (group) {
@@ -40,24 +54,76 @@ export function AddExpenseScreen({ route, navigation }: Props) {
     [group, profiles]
   );
 
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [paidBy, setPaidBy] = useState(currentUser?.uid ?? members[0]?.uid ?? '');
-  const [payerMenuVisible, setPayerMenuVisible] = useState(false);
+  const [description, setDescription] = useState(existingExpense?.description ?? '');
+  const [amount, setAmount] = useState(existingExpense ? String(existingExpense.amount) : '');
+  const [paidBy, setPaidBy] = useState(
+    existingExpense?.paidBy ?? currentUser?.uid ?? members[0]?.uid ?? ''
+  );
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
-  const [category, setCategory] = useState<ExpenseCategory>('food');
-  const [notes, setNotes] = useState('');
-  const [participantIds, setParticipantIds] = useState<string[]>(group?.memberIds ?? []);
+  const [customValues, setCustomValues] = useState<Record<string, number>>(() => {
+    if (!existingExpense) return {};
+    const values: Record<string, number> = {};
+    for (const split of existingExpense.splits) {
+      values[split.userId] = split.percentage ?? split.amount;
+    }
+    return values;
+  });
+  const [category, setCategory] = useState<ExpenseCategory>(existingExpense?.category ?? 'food');
+  const [notes, setNotes] = useState(existingExpense?.notes ?? '');
+  const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | 'none'>(
+    existingExpense?.recurrenceRule ?? 'none'
+  );
+  const [participantIds, setParticipantIds] = useState<string[]>(
+    existingExpense ? existingExpense.splits.map((s) => s.userId) : group?.memberIds ?? []
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState('');
+  const [commentBody, setCommentBody] = useState('');
+  const [isCommenting, setIsCommenting] = useState(false);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(existingExpense?.receiptUrl ?? null);
+  const [receiptDisplayUrl, setReceiptDisplayUrl] = useState<string | null>(null);
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  const [pendingExpenseId] = useState(() => existingExpense?.id ?? generateUUID());
 
   useEffect(() => {
-    if (group) setParticipantIds(group.memberIds);
-  }, [group]);
+    if (!receiptUrl) {
+      setReceiptDisplayUrl(null);
+      return;
+    }
+    getReceiptUrl(receiptUrl)
+      .then(setReceiptDisplayUrl)
+      .catch(() => setReceiptDisplayUrl(null));
+  }, [receiptUrl]);
 
   useEffect(() => {
-    if (group) setParticipantIds(group.memberIds);
-  }, [group]);
+    if (group && !isEditing) setParticipantIds(group.memberIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group, isEditing]);
+
+  useEffect(() => {
+    if (expenseId) {
+      fetchComments(expenseId).catch(() => {
+        // Si falla, el hilo de comentarios queda vacío.
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenseId]);
+
+  const comments = expenseId ? commentsByExpense[expenseId] ?? [] : [];
+
+  const handleAddComment = async () => {
+    if (!commentBody.trim() || !expenseId || !currentUser) return;
+    setIsCommenting(true);
+    try {
+      await addComment({ expenseId, userId: currentUser.uid, body: commentBody.trim() });
+      setCommentBody('');
+    } catch {
+      // Si falla, el comentario simplemente no se agrega.
+    } finally {
+      setIsCommenting(false);
+    }
+  };
 
   const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
 
@@ -67,237 +133,378 @@ export function AddExpenseScreen({ route, navigation }: Props) {
     );
   };
 
+  const setCustomValue = (userId: string, value: string) => {
+    const parsed = parseFloat(value.replace(',', '.'));
+    setCustomValues((prev) => ({ ...prev, [userId]: Number.isFinite(parsed) ? parsed : 0 }));
+  };
+
+  const handleUploadReceipt = async (options: UploadRequestOption) => {
+    const file = options.file as File;
+    if (!currentUser) {
+      options.onError?.(new Error('No autenticado'));
+      return;
+    }
+    setIsUploadingReceipt(true);
+    try {
+      const path = await uploadReceipt(groupId, pendingExpenseId, file);
+      setReceiptUrl(path);
+      options.onSuccess?.(path);
+    } catch (err) {
+      options.onError?.(err as Error);
+    } finally {
+      setIsUploadingReceipt(false);
+    }
+  };
+
+  const customValuesTotal = participantIds.reduce((sum, id) => sum + (customValues[id] ?? 0), 0);
+
+  const customSplitError = useMemo(() => {
+    if (splitMode === 'percentage' && Math.abs(customValuesTotal - 100) > 0.5) {
+      return `Los porcentajes deben sumar 100% (suman ${customValuesTotal.toFixed(1)}%).`;
+    }
+    if (splitMode === 'exact' && Math.abs(customValuesTotal - numericAmount) > 0.01) {
+      return `Los montos deben sumar ${numericAmount.toFixed(2)} (suman ${customValuesTotal.toFixed(2)}).`;
+    }
+    return '';
+  }, [splitMode, customValuesTotal, numericAmount]);
+
   const handleSubmit = async () => {
     if (!description.trim() || numericAmount <= 0 || !paidBy || participantIds.length === 0) return;
     if (!currentUser || !group) return;
+    if (splitMode !== 'equal' && customSplitError) return;
 
     setError('');
     setIsSubmitting(true);
     try {
-      await addExpense({
-        groupId,
-        description: description.trim(),
-        amount: numericAmount,
-        currency: group.currency,
-        paidBy,
-        category,
-        date: Date.now(),
-        notes,
-        createdBy: currentUser.uid,
-        splitMode,
-        participantIds,
-      });
-      navigation.goBack();
-    } catch (err) {
-      setError('No pudimos agregar el gasto. Inténtalo de nuevo.');
+      if (isEditing && expenseId) {
+        await updateExpense({
+          id: expenseId,
+          groupId,
+          description: description.trim(),
+          amount: numericAmount,
+          currency: group.currency,
+          paidBy,
+          category,
+          date: existingExpense?.date ?? Date.now(),
+          notes,
+          createdBy: currentUser.uid,
+          splitMode,
+          participantIds,
+          customValues: splitMode === 'equal' ? undefined : customValues,
+          recurrenceRule: recurrenceRule === 'none' ? null : recurrenceRule,
+          receiptUrl,
+        });
+      } else {
+        await addExpense({
+          id: pendingExpenseId,
+          groupId,
+          description: description.trim(),
+          amount: numericAmount,
+          currency: group.currency,
+          paidBy,
+          category,
+          date: Date.now(),
+          notes,
+          createdBy: currentUser.uid,
+          splitMode,
+          participantIds,
+          customValues: splitMode === 'equal' ? undefined : customValues,
+          recurrenceRule: recurrenceRule === 'none' ? null : recurrenceRule,
+          receiptUrl,
+        });
+      }
+      navigate(-1);
+    } catch {
+      setError(isEditing ? 'No pudimos guardar los cambios. Inténtalo de nuevo.' : 'No pudimos agregar el gasto. Inténtalo de nuevo.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const payer = profiles[paidBy];
-  const canSubmit = description.trim().length > 0 && numericAmount > 0 && participantIds.length > 0 && Boolean(group);
+  const handleDelete = () => {
+    if (!expenseId) return;
+    Modal.confirm({
+      title: 'Eliminar gasto',
+      content: '¿Seguro que quieres eliminar este gasto? Esta acción no se puede deshacer.',
+      okText: 'Eliminar',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancelar',
+      onOk: async () => {
+        setIsDeleting(true);
+        try {
+          await deleteExpense(groupId, expenseId);
+          navigate(-1);
+        } catch {
+          setError('No pudimos eliminar el gasto. Inténtalo de nuevo.');
+        } finally {
+          setIsDeleting(false);
+        }
+      },
+    });
+  };
+
+  const canSubmit =
+    description.trim().length > 0 &&
+    numericAmount > 0 &&
+    participantIds.length > 0 &&
+    Boolean(group) &&
+    (splitMode === 'equal' || !customSplitError);
 
   if (!group) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
-        <Text style={styles.helperText}>No pudimos encontrar este grupo.</Text>
-      </SafeAreaView>
+      <div style={{ padding: 16 }}>
+        <Typography.Text type="secondary">No pudimos encontrar este grupo.</Typography.Text>
+      </div>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" role="main">
-          <Text variant="headlineSmall" style={styles.title} accessibilityRole="header" aria-level={1}>
-            Agregar gasto
-          </Text>
-
-          <TextInput
-            label="Descripción"
-            value={description}
-            onChangeText={setDescription}
-            mode="outlined"
-            style={styles.input}
-            placeholder="Ej. Almuerzo en el centro"
-          />
-
-          <TextInput
-            label={`Monto (${group.currency})`}
-            value={amount}
-            onChangeText={setAmount}
-            mode="outlined"
-            keyboardType="decimal-pad"
-            style={styles.input}
-            left={<TextInput.Affix text={group.currency} />}
-          />
-
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            ¿Quién pagó?
-          </Text>
-          <Menu
-            visible={payerMenuVisible}
-            onDismiss={() => setPayerMenuVisible(false)}
-            anchor={
-              <Button
-                mode="outlined"
-                onPress={() => setPayerMenuVisible(true)}
-                style={styles.payerButton}
-                icon={() => (payer ? <Avatar emoji={payer.emoji} color={payer.avatarColor} size={24} /> : undefined)}
-              >
-                {payer?.name ?? 'Selecciona'}
-              </Button>
-            }
-          >
-            {members.map((member) => (
-              <Menu.Item
-                key={member.uid}
-                title={member.name}
-                onPress={() => {
-                  setPaidBy(member.uid);
-                  setPayerMenuVisible(false);
-                }}
-              />
-            ))}
-          </Menu>
-
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Dividir entre
-          </Text>
-          <View style={styles.chipRow}>
-            {members.map((member) => (
-              <Chip
-                key={member.uid}
-                selected={participantIds.includes(member.uid)}
-                onPress={() => toggleParticipant(member.uid)}
-                style={styles.chip}
-              >
-                {member.emoji} {member.name}
-              </Chip>
-            ))}
-          </View>
-
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Modo de división
-          </Text>
-          <SegmentedButtons
-            value={splitMode}
-            onValueChange={(value) => setSplitMode(value as SplitMode)}
-            style={styles.segmented}
-            buttons={[
-              { value: 'equal', label: 'Igual' },
-              { value: 'percentage', label: '%' },
-              { value: 'exact', label: 'Exacto' },
-              { value: 'shares', label: 'Shares' },
-            ]}
-          />
-          {splitMode !== 'equal' && (
-            <Text variant="bodySmall" style={styles.helperText}>
-              El detalle por persona para este modo se ajusta luego desde el detalle del gasto. Por ahora se aplica división igual como base.
-            </Text>
-          )}
-
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Categoría
-          </Text>
-          <View style={styles.chipRow}>
-            {mockCategories.map((cat) => (
-              <Chip
-                key={cat.value}
-                selected={category === cat.value}
-                onPress={() => setCategory(cat.value)}
-                style={styles.chip}
-                icon={cat.icon}
-              >
-                {cat.label}
-              </Chip>
-            ))}
-          </View>
-
-          <Text variant="labelLarge" style={styles.sectionLabel}>
-            Fecha
-          </Text>
-          <Text variant="bodyMedium" style={styles.dateText}>
-            {formatDate(Date.now())}
-          </Text>
-
-          <TextInput
-            label="Notas (opcional)"
-            value={notes}
-            onChangeText={setNotes}
-            mode="outlined"
-            multiline
-            numberOfLines={3}
-            style={styles.input}
-          />
-
+    <div style={{ padding: 16, paddingBottom: 48 }} role="main">
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+        <Button type="text" icon={<ArrowLeftOutlined />} aria-label="Volver" onClick={() => navigate(-1)} />
+        <Typography.Title level={1} style={{ fontSize: 20, margin: 0, flex: 1 }}>
+          {isEditing ? 'Editar gasto' : 'Agregar gasto'}
+        </Typography.Title>
+        {isEditing && (
           <Button
-            mode="contained"
-            onPress={handleSubmit}
-            disabled={!canSubmit || isSubmitting}
-            loading={isSubmitting}
-            style={styles.submitButton}
-            contentStyle={styles.submitButtonContent}
+            type="text"
+            danger
+            icon={<DeleteOutlined />}
+            aria-label="Eliminar gasto"
+            onClick={handleDelete}
+            loading={isDeleting}
+          />
+        )}
+      </div>
+
+      <Input
+        placeholder="Ej. Almuerzo en el centro"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        style={{ marginBottom: 16 }}
+        size="large"
+      />
+
+      <Input
+        addonBefore={group.currency}
+        placeholder="Monto"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        inputMode="decimal"
+        style={{ marginBottom: 16 }}
+        size="large"
+      />
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        ¿Quién pagó?
+      </Typography.Text>
+      <Select
+        value={paidBy || undefined}
+        onChange={(value) => setPaidBy(value)}
+        style={{ width: '100%', marginBottom: 16 }}
+        placeholder="Selecciona"
+        options={members.map((member) => ({
+          value: member.uid,
+          label: (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Avatar emoji={member.emoji} color={member.avatarColor} size={20} />
+              {member.name}
+            </div>
+          ),
+        }))}
+      />
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Dividir entre
+      </Typography.Text>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        {members.map((member) => {
+          const selected = participantIds.includes(member.uid);
+          return (
+            <Button
+              key={member.uid}
+              type={selected ? 'primary' : 'default'}
+              shape="round"
+              size="small"
+              onClick={() => toggleParticipant(member.uid)}
+            >
+              {member.emoji} {member.name}
+            </Button>
+          );
+        })}
+      </div>
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Modo de división
+      </Typography.Text>
+      <Segmented
+        value={splitMode}
+        onChange={(value) => setSplitMode(value as SplitMode)}
+        block
+        style={{ marginBottom: 8 }}
+        options={[
+          { value: 'equal', label: 'Igual' },
+          { value: 'percentage', label: '%' },
+          { value: 'exact', label: 'Exacto' },
+          { value: 'shares', label: 'Shares' },
+        ]}
+      />
+      {splitMode !== 'equal' && (
+        <div style={{ marginBottom: 16 }}>
+          {participantIds.map((userId) => {
+            const member = members.find((m) => m.uid === userId);
+            if (!member) return null;
+            return (
+              <div key={userId} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Avatar emoji={member.emoji} color={member.avatarColor} size={24} />
+                <Typography.Text style={{ flex: 1 }}>{member.name}</Typography.Text>
+                <Input
+                  value={customValues[userId] !== undefined ? String(customValues[userId]) : ''}
+                  onChange={(e) => setCustomValue(userId, e.target.value)}
+                  inputMode="decimal"
+                  style={{ width: 100 }}
+                  addonAfter={splitMode === 'percentage' ? '%' : splitMode === 'exact' ? group.currency : undefined}
+                  placeholder={splitMode === 'shares' ? '1' : '0'}
+                />
+              </div>
+            );
+          })}
+          {customSplitError ? (
+            <Typography.Text type="danger" style={{ display: 'block', fontSize: 12 }}>
+              {customSplitError}
+            </Typography.Text>
+          ) : (
+            <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
+              {splitMode === 'percentage' && `Suman ${customValuesTotal.toFixed(1)}%`}
+              {splitMode === 'exact' && `Suman ${customValuesTotal.toFixed(2)} ${group.currency}`}
+              {splitMode === 'shares' && 'Las shares determinan la proporción de cada persona.'}
+            </Typography.Text>
+          )}
+        </div>
+      )}
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Repetir
+      </Typography.Text>
+      <Segmented
+        value={recurrenceRule}
+        onChange={(value) => setRecurrenceRule(value as RecurrenceRule | 'none')}
+        block
+        style={{ marginBottom: 16 }}
+        options={[
+          { value: 'none', label: 'Nunca' },
+          { value: 'weekly', label: 'Semanal' },
+          { value: 'monthly', label: 'Mensual' },
+          { value: 'yearly', label: 'Anual' },
+        ]}
+      />
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Categoría
+      </Typography.Text>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        {mockCategories.map((cat) => (
+          <Button
+            key={cat.value}
+            type={category === cat.value ? 'primary' : 'default'}
+            shape="round"
+            size="small"
+            onClick={() => setCategory(cat.value)}
           >
-            Agregar gasto
+            {cat.label}
           </Button>
-          {error.length > 0 && <HelperText type="error">{error}</HelperText>}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        ))}
+      </div>
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Fecha
+      </Typography.Text>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+        {formatDate(Date.now())}
+      </Typography.Text>
+
+      <Input.TextArea
+        placeholder="Notas (opcional)"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        rows={3}
+        style={{ marginBottom: 16 }}
+      />
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Recibo
+      </Typography.Text>
+      <div style={{ marginBottom: 16 }}>
+        {receiptUrl && receiptDisplayUrl && (
+          <a
+            href={receiptDisplayUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{ display: 'block', marginBottom: 8 }}
+          >
+            <img
+              src={receiptDisplayUrl}
+              alt="Recibo adjunto"
+              style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block' }}
+            />
+          </a>
+        )}
+        <Upload customRequest={handleUploadReceipt} showUploadList={false} accept="image/*">
+          <Button icon={<PaperClipOutlined />} loading={isUploadingReceipt}>
+            {receiptUrl ? 'Cambiar foto' : 'Adjuntar foto'}
+          </Button>
+        </Upload>
+      </div>
+
+      <Button type="primary" block size="large" onClick={handleSubmit} disabled={!canSubmit} loading={isSubmitting}>
+        {isEditing ? 'Guardar cambios' : 'Agregar gasto'}
+      </Button>
+      {error.length > 0 && (
+        <Alert type="error" message={error} style={{ marginTop: 16 }} />
+      )}
+
+      {isEditing && (
+        <div style={{ marginTop: 32 }}>
+          <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+            Comentarios
+          </Typography.Text>
+          {comments.length === 0 && (
+            <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+              Sin comentarios todavía.
+            </Typography.Text>
+          )}
+          {comments.map((comment) => {
+            const author = profiles[comment.userId];
+            return (
+              <div key={comment.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
+                {author && <Avatar emoji={author.emoji} color={author.avatarColor} size={28} />}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, opacity: 0.6 }}>
+                    {author?.name ?? 'Alguien'} · {formatRelativeDate(comment.createdAt)}
+                  </div>
+                  <div>{comment.body}</div>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <Input
+              placeholder="Escribe un comentario"
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value)}
+              onPressEnter={handleAddComment}
+            />
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              aria-label="Enviar comentario"
+              onClick={handleAddComment}
+              loading={isCommenting}
+              disabled={!commentBody.trim()}
+            />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 48,
-  },
-  title: {
-    marginBottom: 24,
-    fontWeight: '700',
-  },
-  input: {
-    marginBottom: 16,
-  },
-  sectionLabel: {
-    marginBottom: 8,
-  },
-  payerButton: {
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  chip: {
-    marginBottom: 4,
-  },
-  segmented: {
-    marginBottom: 8,
-  },
-  helperText: {
-    opacity: 0.6,
-    marginBottom: 16,
-  },
-  dateText: {
-    marginBottom: 16,
-    opacity: 0.8,
-  },
-  submitButton: {
-    marginTop: 16,
-  },
-  submitButtonContent: {
-    height: 48,
-  },
-});
