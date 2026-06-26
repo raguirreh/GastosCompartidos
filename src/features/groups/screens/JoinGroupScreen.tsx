@@ -51,6 +51,11 @@ export function JoinGroupScreen() {
     navigate('/signup');
   };
 
+  const handleLoginToJoin = () => {
+    setPendingInviteToken(token);
+    navigate('/login');
+  };
+
   const handleJoin = async () => {
     setIsJoining(true);
     setError('');
@@ -100,6 +105,9 @@ export function JoinGroupScreen() {
                 </Typography.Paragraph>
                 <Button type="primary" block onClick={handleCreateAccountToJoin} style={{ height: 48 }}>
                   Crear cuenta para unirme
+                </Button>
+                <Button type="text" block onClick={handleLoginToJoin} style={{ marginTop: 8 }}>
+                  ¿Ya tienes cuenta? Inicia sesión
                 </Button>
               </>
             )}

@@ -2,6 +2,8 @@ import { Alert, Button, Form, Input, Typography } from 'antd';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithPassword } from '../../../services/supabase/auth';
+import { joinGroupByInviteToken } from '../../../services/supabase/api';
+import { useAuthStore } from '../../../store/authStore';
 
 interface FormValues {
   email: string;
@@ -10,6 +12,8 @@ interface FormValues {
 
 export function LoginScreen() {
   const navigate = useNavigate();
+  const pendingInviteToken = useAuthStore((s) => s.pendingInviteToken);
+  const setPendingInviteToken = useAuthStore((s) => s.setPendingInviteToken);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -18,7 +22,17 @@ export function LoginScreen() {
     setIsSubmitting(true);
     try {
       await signInWithPassword(values.email.trim(), values.password);
-      // El listener de onAuthStateChange en main.tsx se encarga del resto.
+      if (pendingInviteToken) {
+        try {
+          await joinGroupByInviteToken(pendingInviteToken);
+        } catch {
+          // El token podría haber expirado o ya estar usado: no bloqueamos el flujo.
+        } finally {
+          setPendingInviteToken(null);
+        }
+        navigate('/app/home', { replace: true });
+      }
+      // Si no había invitación pendiente, el listener de onAuthStateChange en main.tsx se encarga del resto.
     } catch {
       setError('No pudimos iniciar tu sesión. Revisa tu correo y contraseña.');
     } finally {
