@@ -57,6 +57,14 @@ export function AddExpenseScreen() {
     existingExpense?.paidBy ?? currentUser?.uid ?? members[0]?.uid ?? ''
   );
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
+  const [customValues, setCustomValues] = useState<Record<string, number>>(() => {
+    if (!existingExpense) return {};
+    const values: Record<string, number> = {};
+    for (const split of existingExpense.splits) {
+      values[split.userId] = split.percentage ?? split.amount;
+    }
+    return values;
+  });
   const [category, setCategory] = useState<ExpenseCategory>(existingExpense?.category ?? 'food');
   const [notes, setNotes] = useState(existingExpense?.notes ?? '');
   const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | 'none'>(
@@ -108,9 +116,27 @@ export function AddExpenseScreen() {
     );
   };
 
+  const setCustomValue = (userId: string, value: string) => {
+    const parsed = parseFloat(value.replace(',', '.'));
+    setCustomValues((prev) => ({ ...prev, [userId]: Number.isFinite(parsed) ? parsed : 0 }));
+  };
+
+  const customValuesTotal = participantIds.reduce((sum, id) => sum + (customValues[id] ?? 0), 0);
+
+  const customSplitError = useMemo(() => {
+    if (splitMode === 'percentage' && Math.abs(customValuesTotal - 100) > 0.5) {
+      return `Los porcentajes deben sumar 100% (suman ${customValuesTotal.toFixed(1)}%).`;
+    }
+    if (splitMode === 'exact' && Math.abs(customValuesTotal - numericAmount) > 0.01) {
+      return `Los montos deben sumar ${numericAmount.toFixed(2)} (suman ${customValuesTotal.toFixed(2)}).`;
+    }
+    return '';
+  }, [splitMode, customValuesTotal, numericAmount]);
+
   const handleSubmit = async () => {
     if (!description.trim() || numericAmount <= 0 || !paidBy || participantIds.length === 0) return;
     if (!currentUser || !group) return;
+    if (splitMode !== 'equal' && customSplitError) return;
 
     setError('');
     setIsSubmitting(true);
@@ -129,6 +155,7 @@ export function AddExpenseScreen() {
           createdBy: currentUser.uid,
           splitMode,
           participantIds,
+          customValues: splitMode === 'equal' ? undefined : customValues,
           recurrenceRule: recurrenceRule === 'none' ? null : recurrenceRule,
         });
       } else {
@@ -144,6 +171,7 @@ export function AddExpenseScreen() {
           createdBy: currentUser.uid,
           splitMode,
           participantIds,
+          customValues: splitMode === 'equal' ? undefined : customValues,
           recurrenceRule: recurrenceRule === 'none' ? null : recurrenceRule,
         });
       }
@@ -177,7 +205,12 @@ export function AddExpenseScreen() {
     });
   };
 
-  const canSubmit = description.trim().length > 0 && numericAmount > 0 && participantIds.length > 0 && Boolean(group);
+  const canSubmit =
+    description.trim().length > 0 &&
+    numericAmount > 0 &&
+    participantIds.length > 0 &&
+    Boolean(group) &&
+    (splitMode === 'equal' || !customSplitError);
 
   if (!group) {
     return (
@@ -279,10 +312,37 @@ export function AddExpenseScreen() {
         ]}
       />
       {splitMode !== 'equal' && (
-        <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 16 }}>
-          El detalle por persona para este modo se ajusta luego desde el detalle del gasto. Por ahora se aplica
-          división igual como base.
-        </Typography.Text>
+        <div style={{ marginBottom: 16 }}>
+          {participantIds.map((userId) => {
+            const member = members.find((m) => m.uid === userId);
+            if (!member) return null;
+            return (
+              <div key={userId} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Avatar emoji={member.emoji} color={member.avatarColor} size={24} />
+                <Typography.Text style={{ flex: 1 }}>{member.name}</Typography.Text>
+                <Input
+                  value={customValues[userId] !== undefined ? String(customValues[userId]) : ''}
+                  onChange={(e) => setCustomValue(userId, e.target.value)}
+                  inputMode="decimal"
+                  style={{ width: 100 }}
+                  addonAfter={splitMode === 'percentage' ? '%' : splitMode === 'exact' ? group.currency : undefined}
+                  placeholder={splitMode === 'shares' ? '1' : '0'}
+                />
+              </div>
+            );
+          })}
+          {customSplitError ? (
+            <Typography.Text type="danger" style={{ display: 'block', fontSize: 12 }}>
+              {customSplitError}
+            </Typography.Text>
+          ) : (
+            <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
+              {splitMode === 'percentage' && `Suman ${customValuesTotal.toFixed(1)}%`}
+              {splitMode === 'exact' && `Suman ${customValuesTotal.toFixed(2)} ${group.currency}`}
+              {splitMode === 'shares' && 'Las shares determinan la proporción de cada persona.'}
+            </Typography.Text>
+          )}
+        </div>
       )}
 
       <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
