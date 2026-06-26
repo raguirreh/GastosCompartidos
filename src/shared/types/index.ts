@@ -71,6 +71,8 @@ export interface Expense {
   recurrenceRule: RecurrenceRule | null;
   /** Próxima fecha (epoch ms) en la que debe generarse la siguiente instancia. Solo aplica a plantillas. */
   nextOccurrenceDate: number | null;
+  /** Path en el bucket de storage `receipts` de la foto del recibo, si se adjuntó una. Resolver con `getReceiptUrl`. */
+  receiptUrl: string | null;
 }
 
 export type RecurrenceRule = 'weekly' | 'monthly' | 'yearly';

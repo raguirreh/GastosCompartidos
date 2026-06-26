@@ -27,6 +27,9 @@ interface CreateExpenseInput {
   customValues?: Record<string, number>;
   /** Si se define, este gasto se convierte en plantilla que genera nuevas instancias periódicamente. */
   recurrenceRule?: RecurrenceRule | null;
+  receiptUrl?: string | null;
+  /** Permite que el caller fije el id por adelantado (ej. para subir un recibo antes de crear el gasto). */
+  id?: string;
 }
 
 interface UpdateExpenseInput extends CreateExpenseInput {
@@ -175,7 +178,7 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
   },
 
   addExpense: async (input) => {
-    const id = generateUUID();
+    const id = input.id ?? generateUUID();
     const splits = calculateSplits(
       input.amount,
       input.participantIds,
@@ -201,6 +204,7 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       syncStatus: 'synced',
       recurrenceRule,
       nextOccurrenceDate: recurrenceRule ? nextOccurrence(input.date, recurrenceRule) : null,
+      receiptUrl: input.receiptUrl ?? null,
     };
 
     set((state) => {
@@ -245,6 +249,7 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       syncStatus: 'synced',
       recurrenceRule,
       nextOccurrenceDate,
+      receiptUrl: input.receiptUrl !== undefined ? input.receiptUrl : existing?.receiptUrl ?? null,
     };
 
     await updateExpenseRemote(expense);
@@ -292,6 +297,7 @@ export const useExpensesStore = create<ExpensesState>((set, get) => ({
       syncStatus: 'synced',
       recurrenceRule: null,
       nextOccurrenceDate: null,
+      receiptUrl: null,
     };
 
     set((state) => {

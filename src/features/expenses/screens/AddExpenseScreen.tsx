@@ -1,11 +1,14 @@
-import { ArrowLeftOutlined, DeleteOutlined, SendOutlined } from '@ant-design/icons';
-import { Alert, Button, Input, Modal, Segmented, Select, Typography } from 'antd';
+import { ArrowLeftOutlined, DeleteOutlined, PaperClipOutlined, SendOutlined } from '@ant-design/icons';
+import { Alert, Button, Input, Modal, Segmented, Select, Typography, Upload } from 'antd';
+import type { UploadRequestOption } from 'rc-upload/lib/interface';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Avatar } from '../../../shared/components/Avatar';
 import { mockCategories } from '../../../shared/constants/categories';
+import { getReceiptUrl, uploadReceipt } from '../../../services/supabase/api';
 import type { ExpenseCategory, RecurrenceRule, SplitMode } from '../../../shared/types';
 import { formatDate, formatRelativeDate } from '../../../shared/utils/format';
+import { generateUUID } from '../../../shared/utils/uuid';
 import { useCommentsStore } from '../../../store/commentsStore';
 import { useExpensesStore } from '../../../store/expensesStore';
 import { useGroupsStore } from '../../../store/groupsStore';
@@ -78,6 +81,20 @@ export function AddExpenseScreen() {
   const [error, setError] = useState('');
   const [commentBody, setCommentBody] = useState('');
   const [isCommenting, setIsCommenting] = useState(false);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(existingExpense?.receiptUrl ?? null);
+  const [receiptDisplayUrl, setReceiptDisplayUrl] = useState<string | null>(null);
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  const [pendingExpenseId] = useState(() => existingExpense?.id ?? generateUUID());
+
+  useEffect(() => {
+    if (!receiptUrl) {
+      setReceiptDisplayUrl(null);
+      return;
+    }
+    getReceiptUrl(receiptUrl)
+      .then(setReceiptDisplayUrl)
+      .catch(() => setReceiptDisplayUrl(null));
+  }, [receiptUrl]);
 
   useEffect(() => {
     if (group && !isEditing) setParticipantIds(group.memberIds);
@@ -121,6 +138,24 @@ export function AddExpenseScreen() {
     setCustomValues((prev) => ({ ...prev, [userId]: Number.isFinite(parsed) ? parsed : 0 }));
   };
 
+  const handleUploadReceipt = async (options: UploadRequestOption) => {
+    const file = options.file as File;
+    if (!currentUser) {
+      options.onError?.(new Error('No autenticado'));
+      return;
+    }
+    setIsUploadingReceipt(true);
+    try {
+      const path = await uploadReceipt(groupId, pendingExpenseId, file);
+      setReceiptUrl(path);
+      options.onSuccess?.(path);
+    } catch (err) {
+      options.onError?.(err as Error);
+    } finally {
+      setIsUploadingReceipt(false);
+    }
+  };
+
   const customValuesTotal = participantIds.reduce((sum, id) => sum + (customValues[id] ?? 0), 0);
 
   const customSplitError = useMemo(() => {
@@ -157,9 +192,11 @@ export function AddExpenseScreen() {
           participantIds,
           customValues: splitMode === 'equal' ? undefined : customValues,
           recurrenceRule: recurrenceRule === 'none' ? null : recurrenceRule,
+          receiptUrl,
         });
       } else {
         await addExpense({
+          id: pendingExpenseId,
           groupId,
           description: description.trim(),
           amount: numericAmount,
@@ -173,6 +210,7 @@ export function AddExpenseScreen() {
           participantIds,
           customValues: splitMode === 'equal' ? undefined : customValues,
           recurrenceRule: recurrenceRule === 'none' ? null : recurrenceRule,
+          receiptUrl,
         });
       }
       navigate(-1);
@@ -392,6 +430,31 @@ export function AddExpenseScreen() {
         rows={3}
         style={{ marginBottom: 16 }}
       />
+
+      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+        Recibo
+      </Typography.Text>
+      <div style={{ marginBottom: 16 }}>
+        {receiptUrl && receiptDisplayUrl && (
+          <a
+            href={receiptDisplayUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{ display: 'block', marginBottom: 8 }}
+          >
+            <img
+              src={receiptDisplayUrl}
+              alt="Recibo adjunto"
+              style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block' }}
+            />
+          </a>
+        )}
+        <Upload customRequest={handleUploadReceipt} showUploadList={false} accept="image/*">
+          <Button icon={<PaperClipOutlined />} loading={isUploadingReceipt}>
+            {receiptUrl ? 'Cambiar foto' : 'Adjuntar foto'}
+          </Button>
+        </Upload>
+      </div>
 
       <Button type="primary" block size="large" onClick={handleSubmit} disabled={!canSubmit} loading={isSubmitting}>
         {isEditing ? 'Guardar cambios' : 'Agregar gasto'}

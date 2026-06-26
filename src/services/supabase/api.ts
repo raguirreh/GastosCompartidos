@@ -286,6 +286,7 @@ interface ExpenseRow {
   created_at: string;
   recurrence_rule: string | null;
   next_occurrence_date: string | null;
+  receipt_url: string | null;
 }
 
 interface SplitRow {
@@ -316,6 +317,7 @@ function rowsToExpense(row: ExpenseRow, splitRows: SplitRow[]): Expense {
     syncStatus: 'synced',
     recurrenceRule: (row.recurrence_rule as Expense['recurrenceRule']) ?? null,
     nextOccurrenceDate: row.next_occurrence_date ? new Date(row.next_occurrence_date).getTime() : null,
+    receiptUrl: row.receipt_url ?? null,
   };
 }
 
@@ -338,6 +340,7 @@ export async function createExpense(expense: Expense): Promise<void> {
     next_occurrence_date: expense.nextOccurrenceDate
       ? new Date(expense.nextOccurrenceDate).toISOString().slice(0, 10)
       : null,
+    receipt_url: expense.receiptUrl,
   });
   if (expenseError) throw expenseError;
 
@@ -372,6 +375,7 @@ export async function updateExpense(expense: Expense): Promise<void> {
       next_occurrence_date: expense.nextOccurrenceDate
         ? new Date(expense.nextOccurrenceDate).toISOString().slice(0, 10)
         : null,
+      receipt_url: expense.receiptUrl,
     })
     .eq('id', expense.id);
   if (expenseError) throw expenseError;
@@ -413,6 +417,36 @@ export async function deleteExpense(expenseId: string): Promise<void> {
 
   const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
   if (error) throw error;
+}
+
+/**
+ * Sube la foto de un recibo al bucket privado `receipts`, bajo `${groupId}/...` para que
+ * las policies de RLS puedan restringir el acceso a miembros del grupo. Devuelve el `path`
+ * de storage (no una URL pública); usar `getReceiptUrl` para resolverlo a una URL firmada.
+ */
+export async function uploadReceipt(groupId: string, expenseId: string, file: File): Promise<string> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase no configurado');
+
+  const extension = file.name.split('.').pop() ?? 'jpg';
+  const path = `${groupId}/${expenseId}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('receipts')
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (uploadError) throw uploadError;
+
+  return path;
+}
+
+/** Resuelve un `path` de storage de `receipts` a una URL firmada de acceso temporal. */
+export async function getReceiptUrl(path: string): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase.storage.from('receipts').createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data?.signedUrl ?? null;
 }
 
 export async function fetchExpensesForGroup(groupId: string): Promise<Expense[]> {
