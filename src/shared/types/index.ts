@@ -38,6 +38,7 @@ export interface Group {
   inviteToken: string;
   /** true para un "grupo" 1-a-1 creado por la funcionalidad de Amigos (no aparece en la lista de Grupos). */
   isDirect: boolean;
+  archived: boolean;
 }
 
 export interface GroupMember {

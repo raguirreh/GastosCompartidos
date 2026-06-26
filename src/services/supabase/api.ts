@@ -62,6 +62,7 @@ interface GroupRow {
   invite_token: string;
   created_at: string;
   is_direct: boolean;
+  archived: boolean;
 }
 
 function groupRowToGroup(row: GroupRow, memberIds: string[]): Group {
@@ -75,6 +76,7 @@ function groupRowToGroup(row: GroupRow, memberIds: string[]): Group {
     memberIds,
     inviteToken: row.invite_token,
     isDirect: row.is_direct,
+    archived: row.archived,
   };
 }
 
@@ -83,10 +85,10 @@ function groupRowToGroup(row: GroupRow, memberIds: string[]): Group {
  * `inviteToken` real generado por el default de la tabla), para que el
  * caller pueda renderizar el link de invitación inmediatamente.
  */
-export async function createGroup(group: Omit<Group, 'memberIds' | 'inviteToken'>): Promise<Group> {
+export async function createGroup(group: Omit<Group, 'memberIds' | 'inviteToken' | 'archived'>): Promise<Group> {
   const supabase = getSupabase();
   if (!supabase) {
-    return { ...group, memberIds: [group.createdBy], inviteToken: '' };
+    return { ...group, memberIds: [group.createdBy], inviteToken: '', archived: false };
   }
 
   const { data, error: groupError } = await supabase
@@ -170,6 +172,28 @@ export async function updateGroup(
     .from('groups')
     .update({ name: fields.name, emoji: fields.emoji, currency: fields.currency })
     .eq('id', groupId);
+  if (error) throw error;
+}
+
+export async function setGroupArchived(groupId: string, archived: boolean): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.from('groups').update({ archived }).eq('id', groupId);
+  if (error) throw error;
+}
+
+/**
+ * Elimina un grupo y todos sus datos asociados (gastos, splits, comentarios,
+ * miembros, transacciones) vía la RPC `delete_group` (SECURITY DEFINER), que
+ * valida que el caller sea el creador del grupo antes de borrar. Esto evita
+ * tener que otorgar políticas RLS de DELETE más amplias en las tablas hijas.
+ */
+export async function deleteGroup(groupId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.rpc('delete_group', { p_group_id: groupId });
   if (error) throw error;
 }
 

@@ -28,6 +28,8 @@ export function GroupDetailScreen() {
   const getGroupById = useGroupsStore((s) => s.getGroupById);
   const updateGroup = useGroupsStore((s) => s.updateGroup);
   const leaveGroup = useGroupsStore((s) => s.leaveGroup);
+  const setGroupArchived = useGroupsStore((s) => s.setGroupArchived);
+  const deleteGroup = useGroupsStore((s) => s.deleteGroup);
   const group = getGroupById(groupId);
   const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
   const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
@@ -42,6 +44,8 @@ export function GroupDetailScreen() {
   const [editCurrency, setEditCurrency] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [settingsError, setSettingsError] = useState('');
 
   useEffect(() => {
@@ -130,6 +134,51 @@ export function GroupDetailScreen() {
           navigate('/app/groups', { replace: true });
         } finally {
           setIsLeaving(false);
+        }
+      },
+    });
+  };
+
+  const handleToggleArchive = () => {
+    const archiving = !group.archived;
+    Modal.confirm({
+      title: archiving ? 'Archivar grupo' : 'Desarchivar grupo',
+      content: archiving
+        ? 'El grupo dejará de aparecer en tu lista de grupos activos. Podrás verlo en "Archivados" y desarchivarlo cuando quieras.'
+        : '¿Quieres mover este grupo de vuelta a tu lista de grupos activos?',
+      okText: archiving ? 'Archivar' : 'Desarchivar',
+      cancelText: 'Cancelar',
+      onOk: async () => {
+        setIsArchiving(true);
+        try {
+          await setGroupArchived(groupId, archiving);
+          setSettingsVisible(false);
+          if (archiving) navigate('/app/groups', { replace: true });
+        } finally {
+          setIsArchiving(false);
+        }
+      },
+    });
+  };
+
+  const handleDeleteGroup = () => {
+    Modal.confirm({
+      title: 'Eliminar grupo',
+      content:
+        'Esta acción es permanente: se borrarán todos los gastos, saldos y comentarios del grupo para todos los miembros. ¿Seguro que quieres continuar?',
+      okText: 'Eliminar definitivamente',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancelar',
+      onOk: async () => {
+        setIsDeleting(true);
+        try {
+          await deleteGroup(groupId);
+          setSettingsVisible(false);
+          navigate('/app/groups', { replace: true });
+        } catch {
+          setSettingsError('No pudimos eliminar el grupo. Inténtalo de nuevo.');
+        } finally {
+          setIsDeleting(false);
         }
       },
     });
@@ -378,9 +427,17 @@ export function GroupDetailScreen() {
           >
             Guardar cambios
           </Button>
-          <Button danger block onClick={handleLeaveGroup} loading={isLeaving}>
+          <Button block onClick={handleToggleArchive} loading={isArchiving} style={{ marginBottom: 8 }}>
+            {group.archived ? 'Desarchivar grupo' : 'Archivar grupo'}
+          </Button>
+          <Button danger block onClick={handleLeaveGroup} loading={isLeaving} style={{ marginBottom: 8 }}>
             Salir del grupo
           </Button>
+          {currentUser?.uid === group.createdBy && (
+            <Button danger block onClick={handleDeleteGroup} loading={isDeleting}>
+              Eliminar grupo
+            </Button>
+          )}
         </Form>
       </Modal>
     </div>

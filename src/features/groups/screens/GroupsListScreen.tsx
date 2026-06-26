@@ -1,6 +1,6 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Typography } from 'antd';
-import { useEffect, useMemo } from 'react';
+import { Button, Card, Segmented, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StackedAvatars } from '../../../shared/components/StackedAvatars';
 import { computeGroupSettlements } from '../../../shared/utils/debtSimplification';
@@ -14,7 +14,11 @@ export function GroupsListScreen() {
   const navigate = useNavigate();
   const currentUser = useUserStore((s) => s.currentUser);
   const allGroups = useGroupsStore((s) => s.groups);
-  const groups = useMemo(() => allGroups.filter((g) => !g.isDirect), [allGroups]);
+  const [view, setView] = useState<'active' | 'archived'>('active');
+  const groups = useMemo(
+    () => allGroups.filter((g) => !g.isDirect && g.archived === (view === 'archived')),
+    [allGroups, view]
+  );
   const fetchGroups = useGroupsStore((s) => s.fetchGroups);
   const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
   const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
@@ -74,10 +78,21 @@ export function GroupsListScreen() {
         </Typography.Title>
       </div>
 
+      <Segmented
+        value={view}
+        onChange={(value) => setView(value as 'active' | 'archived')}
+        block
+        style={{ marginBottom: 16 }}
+        options={[
+          { value: 'active', label: 'Activos' },
+          { value: 'archived', label: 'Archivados' },
+        ]}
+      />
+
       <div role="main">
         {groups.length === 0 && (
           <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 48 }}>
-            Todavía no tienes grupos. Crea uno para empezar.
+            {view === 'archived' ? 'No tienes grupos archivados.' : 'Todavía no tienes grupos. Crea uno para empezar.'}
           </Typography.Text>
         )}
 

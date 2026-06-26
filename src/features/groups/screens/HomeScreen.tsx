@@ -44,7 +44,7 @@ export function HomeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups]);
 
-  const realGroups = useMemo(() => groups.filter((g) => !g.isDirect), [groups]);
+  const realGroups = useMemo(() => groups.filter((g) => !g.isDirect && !g.archived), [groups]);
 
   const allExpenses = useMemo(() => Object.values(expensesByGroup).flat(), [expensesByGroup]);
 
