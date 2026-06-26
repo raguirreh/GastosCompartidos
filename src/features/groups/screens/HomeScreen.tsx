@@ -48,10 +48,9 @@ export function HomeScreen() {
 
   const allExpenses = useMemo(() => Object.values(expensesByGroup).flat(), [expensesByGroup]);
 
-  const { owed, owe, net } = useMemo(() => {
-    if (!currentUser) return { owed: 0, owe: 0, net: 0 };
-    let totalOwed = 0;
-    let totalOwe = 0;
+  const balancesByCurrency = useMemo(() => {
+    const result: Record<string, { owed: number; owe: number }> = {};
+    if (!currentUser) return result;
     for (const group of groups) {
       const expenses = expensesByGroup[group.id] ?? [];
       const settlements = computeGroupSettlements(
@@ -61,13 +60,20 @@ export function HomeScreen() {
           splits: expense.splits.map((s) => ({ userId: s.userId, amount: s.amount })),
         }))
       );
+      const bucket = result[group.currency] ?? { owed: 0, owe: 0 };
       for (const settlement of settlements) {
-        if (settlement.toUserId === currentUser.uid) totalOwed += settlement.amount;
-        if (settlement.fromUserId === currentUser.uid) totalOwe += settlement.amount;
+        if (settlement.toUserId === currentUser.uid) bucket.owed += settlement.amount;
+        if (settlement.fromUserId === currentUser.uid) bucket.owe += settlement.amount;
       }
+      result[group.currency] = bucket;
     }
-    return { owed: totalOwed, owe: totalOwe, net: totalOwed - totalOwe };
+    return result;
   }, [groups, expensesByGroup, currentUser]);
+
+  const currencyEntries = useMemo(
+    () => Object.entries(balancesByCurrency).filter(([, b]) => b.owed !== 0 || b.owe !== 0),
+    [balancesByCurrency]
+  );
 
   const recentActivity = useMemo(
     () => [...allExpenses].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4),
@@ -93,33 +99,49 @@ export function HomeScreen() {
 
       <Card style={{ marginBottom: 24 }}>
         <Typography.Text type="secondary">Tu balance neto</Typography.Text>
-        <Typography.Title
-          level={2}
-          style={{ color: net >= 0 ? 'var(--ant-color-success, #52c41a)' : 'var(--ant-color-error, #ff4d4f)' }}
-        >
-          <span aria-hidden="true">{net >= 0 ? '↑ ' : '↓ '}</span>
-          {formatMoney(net, 'PEN')} {net >= 0 ? '(a tu favor)' : '(debes)'}
-        </Typography.Title>
-        <div style={{ display: 'flex', gap: 24, marginTop: 16 }}>
-          <div style={{ flex: 1 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              Te deben
-            </Typography.Text>
-            <div style={{ color: 'var(--ant-color-success, #52c41a)', fontWeight: 600 }}>
-              <span aria-hidden="true">↑ </span>
-              {formatMoney(owed, 'PEN')} (a tu favor)
-            </div>
-          </div>
-          <div style={{ flex: 1 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              Debes
-            </Typography.Text>
-            <div style={{ color: 'var(--ant-color-error, #ff4d4f)', fontWeight: 600 }}>
-              <span aria-hidden="true">↓ </span>
-              {formatMoney(owe, 'PEN')} (debes)
-            </div>
-          </div>
-        </div>
+        {currencyEntries.length === 0 ? (
+          <Typography.Title level={2} style={{ margin: 0 }}>
+            {formatMoney(0, 'PEN')}
+          </Typography.Title>
+        ) : (
+          currencyEntries.map(([currency, { owed, owe }]) => {
+            const net = owed - owe;
+            return (
+              <div key={currency} style={{ marginBottom: 8 }}>
+                <Typography.Title
+                  level={2}
+                  style={{
+                    margin: 0,
+                    color: net >= 0 ? 'var(--ant-color-success, #52c41a)' : 'var(--ant-color-error, #ff4d4f)',
+                  }}
+                >
+                  <span aria-hidden="true">{net >= 0 ? '↑ ' : '↓ '}</span>
+                  {formatMoney(net, currency)} {net >= 0 ? '(a tu favor)' : '(debes)'}
+                </Typography.Title>
+                <div style={{ display: 'flex', gap: 24, marginTop: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      Te deben
+                    </Typography.Text>
+                    <div style={{ color: 'var(--ant-color-success, #52c41a)', fontWeight: 600 }}>
+                      <span aria-hidden="true">↑ </span>
+                      {formatMoney(owed, currency)}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      Debes
+                    </Typography.Text>
+                    <div style={{ color: 'var(--ant-color-error, #ff4d4f)', fontWeight: 600 }}>
+                      <span aria-hidden="true">↓ </span>
+                      {formatMoney(owe, currency)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </Card>
 
       <Typography.Title level={2} style={{ fontSize: 16, marginBottom: 12 }}>

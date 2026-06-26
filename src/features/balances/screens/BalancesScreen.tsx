@@ -15,6 +15,7 @@ interface SettlementEntry {
   groupId: string;
   otherUserId: string;
   amount: number; // positivo: te deben, negativo: debes
+  currency: string;
 }
 
 export function BalancesScreen() {
@@ -69,9 +70,19 @@ export function BalancesScreen() {
       const groupSettlements: Settlement[] = settlementsByGroup[group.id] ?? [];
       for (const settlement of groupSettlements) {
         if (settlement.toUserId === currentUser.uid) {
-          entries.push({ groupId: group.id, otherUserId: settlement.fromUserId, amount: settlement.amount });
+          entries.push({
+            groupId: group.id,
+            otherUserId: settlement.fromUserId,
+            amount: settlement.amount,
+            currency: group.currency,
+          });
         } else if (settlement.fromUserId === currentUser.uid) {
-          entries.push({ groupId: group.id, otherUserId: settlement.toUserId, amount: -settlement.amount });
+          entries.push({
+            groupId: group.id,
+            otherUserId: settlement.toUserId,
+            amount: -settlement.amount,
+            currency: group.currency,
+          });
         }
       }
     }
@@ -80,7 +91,13 @@ export function BalancesScreen() {
 
   const owedToMe = useMemo(() => settlements.filter((s) => s.amount > 0), [settlements]);
   const owedByMe = useMemo(() => settlements.filter((s) => s.amount < 0), [settlements]);
-  const netTotal = useMemo(() => settlements.reduce((sum, s) => sum + s.amount, 0), [settlements]);
+  const netTotalsByCurrency = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const s of settlements) {
+      result[s.currency] = (result[s.currency] ?? 0) + s.amount;
+    }
+    return Object.entries(result).filter(([, amount]) => amount !== 0);
+  }, [settlements]);
 
   const closeDialog = () => {
     setDialogEntry(null);
@@ -161,13 +178,25 @@ export function BalancesScreen() {
 
       <Card style={{ marginBottom: 24 }}>
         <Typography.Text type="secondary">Saldo neto total</Typography.Text>
-        <Typography.Title
-          level={2}
-          style={{ color: netTotal >= 0 ? 'var(--ant-color-success, #52c41a)' : 'var(--ant-color-error, #ff4d4f)' }}
-        >
-          <span aria-hidden="true">{netTotal >= 0 ? '↑ ' : '↓ '}</span>
-          {formatMoney(netTotal, 'PEN')} {netTotal >= 0 ? '(a tu favor)' : '(debes)'}
-        </Typography.Title>
+        {netTotalsByCurrency.length === 0 ? (
+          <Typography.Title level={2} style={{ margin: 0 }}>
+            {formatMoney(0, 'PEN')}
+          </Typography.Title>
+        ) : (
+          netTotalsByCurrency.map(([currency, netTotal]) => (
+            <Typography.Title
+              key={currency}
+              level={2}
+              style={{
+                margin: 0,
+                color: netTotal >= 0 ? 'var(--ant-color-success, #52c41a)' : 'var(--ant-color-error, #ff4d4f)',
+              }}
+            >
+              <span aria-hidden="true">{netTotal >= 0 ? '↑ ' : '↓ '}</span>
+              {formatMoney(netTotal, currency)} {netTotal >= 0 ? '(a tu favor)' : '(debes)'}
+            </Typography.Title>
+          ))
+        )}
       </Card>
 
       <Typography.Title level={2} style={{ fontSize: 16, marginBottom: 12 }}>
