@@ -9,6 +9,8 @@ import { ProfileSetupScreen } from '../../features/auth/screens/ProfileSetupScre
 import { JoinGroupScreen } from '../../features/groups/screens/JoinGroupScreen';
 import { HomeScreen } from '../../features/groups/screens/HomeScreen';
 import { GroupsListScreen } from '../../features/groups/screens/GroupsListScreen';
+import { FriendsListScreen } from '../../features/groups/screens/FriendsListScreen';
+import { AddFriendScreen } from '../../features/groups/screens/AddFriendScreen';
 import { GroupDetailScreen } from '../../features/groups/screens/GroupDetailScreen';
 import { CreateGroupScreen } from '../../features/groups/screens/CreateGroupScreen';
 import { AddExpenseScreen } from '../../features/expenses/screens/AddExpenseScreen';
@@ -33,6 +35,8 @@ export function AppRouter() {
         <Route path="/app" element={<MainLayout />}>
           <Route path="home" element={<HomeScreen />} />
           <Route path="groups" element={<GroupsListScreen />} />
+          <Route path="friends" element={<FriendsListScreen />} />
+          <Route path="friends/new" element={<AddFriendScreen />} />
           <Route path="groups/new" element={<CreateGroupScreen />} />
           <Route path="groups/:groupId" element={<GroupDetailScreen />} />
           <Route path="groups/:groupId/add-expense" element={<AddExpenseScreen />} />

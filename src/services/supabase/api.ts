@@ -61,6 +61,7 @@ interface GroupRow {
   created_by: string;
   invite_token: string;
   created_at: string;
+  is_direct: boolean;
 }
 
 function groupRowToGroup(row: GroupRow, memberIds: string[]): Group {
@@ -73,6 +74,7 @@ function groupRowToGroup(row: GroupRow, memberIds: string[]): Group {
     createdBy: row.created_by,
     memberIds,
     inviteToken: row.invite_token,
+    isDirect: row.is_direct,
   };
 }
 
@@ -95,6 +97,7 @@ export async function createGroup(group: Omit<Group, 'memberIds' | 'inviteToken'
       emoji: group.emoji,
       currency: group.currency,
       created_by: group.createdBy,
+      is_direct: group.isDirect,
     })
     .select()
     .single();
@@ -119,6 +122,7 @@ export async function upsertGroupDoc(group: Group): Promise<void> {
     emoji: group.emoji,
     currency: group.currency,
     created_by: group.createdBy,
+    is_direct: group.isDirect,
   });
   if (error) throw error;
 }
@@ -170,6 +174,7 @@ interface ResolveInviteTokenRow {
   name: string;
   emoji: string;
   currency: string;
+  is_direct: boolean;
 }
 
 /**
@@ -179,7 +184,7 @@ interface ResolveInviteTokenRow {
  */
 export async function resolveInviteToken(
   token: string
-): Promise<{ id: string; name: string; emoji: string; currency: string } | null> {
+): Promise<{ id: string; name: string; emoji: string; currency: string; isDirect: boolean } | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
@@ -190,7 +195,7 @@ export async function resolveInviteToken(
   if (rows.length === 0) return null;
 
   const row = rows[0];
-  return { id: row.id, name: row.name, emoji: row.emoji, currency: row.currency };
+  return { id: row.id, name: row.name, emoji: row.emoji, currency: row.currency, isDirect: row.is_direct };
 }
 
 /**

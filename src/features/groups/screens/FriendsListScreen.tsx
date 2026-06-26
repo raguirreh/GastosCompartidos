@@ -2,7 +2,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import { Button, Card, Typography } from 'antd';
 import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { StackedAvatars } from '../../../shared/components/StackedAvatars';
+import { Avatar } from '../../../shared/components/Avatar';
 import { computeGroupSettlements } from '../../../shared/utils/debtSimplification';
 import { formatMoney } from '../../../shared/utils/format';
 import { useExpensesStore } from '../../../store/expensesStore';
@@ -10,16 +10,17 @@ import { useGroupsStore } from '../../../store/groupsStore';
 import { useProfilesStore } from '../../../store/profilesStore';
 import { useUserStore } from '../../../store/userStore';
 
-export function GroupsListScreen() {
+export function FriendsListScreen() {
   const navigate = useNavigate();
   const currentUser = useUserStore((s) => s.currentUser);
-  const allGroups = useGroupsStore((s) => s.groups);
-  const groups = useMemo(() => allGroups.filter((g) => !g.isDirect), [allGroups]);
+  const groups = useGroupsStore((s) => s.groups);
   const fetchGroups = useGroupsStore((s) => s.fetchGroups);
   const expensesByGroup = useExpensesStore((s) => s.expensesByGroup);
   const fetchExpenses = useExpensesStore((s) => s.fetchExpenses);
   const profiles = useProfilesStore((s) => s.profiles);
   const ensureProfiles = useProfilesStore((s) => s.ensureProfiles);
+
+  const friendGroups = useMemo(() => groups.filter((g) => g.isDirect), [groups]);
 
   useEffect(() => {
     if (currentUser) {
@@ -30,24 +31,24 @@ export function GroupsListScreen() {
   }, [currentUser, fetchGroups]);
 
   useEffect(() => {
-    groups.forEach((group) => {
+    friendGroups.forEach((group) => {
       fetchExpenses(group.id).catch(() => {
-        // Ignoramos errores individuales por grupo.
+        // Ignoramos errores individuales por amigo.
       });
     });
-    const allMemberIds = groups.flatMap((g) => g.memberIds);
+    const allMemberIds = friendGroups.flatMap((g) => g.memberIds);
     if (allMemberIds.length > 0) {
       ensureProfiles(allMemberIds).catch(() => {
         // Si falla, los avatares simplemente no se resuelven aún.
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups]);
+  }, [friendGroups]);
 
-  const groupBalances = useMemo(() => {
+  const balances = useMemo(() => {
     const result: Record<string, number> = {};
     if (!currentUser) return result;
-    for (const group of groups) {
+    for (const group of friendGroups) {
       const expenses = expensesByGroup[group.id] ?? [];
       const settlements = computeGroupSettlements(
         expenses.map((expense) => ({
@@ -64,29 +65,28 @@ export function GroupsListScreen() {
       result[group.id] = net;
     }
     return result;
-  }, [groups, expensesByGroup, currentUser]);
+  }, [friendGroups, expensesByGroup, currentUser]);
 
   return (
     <div style={{ padding: 16, paddingBottom: 96 }}>
       <div role="banner" style={{ paddingBottom: 8 }}>
         <Typography.Title level={1} style={{ fontSize: 22 }}>
-          Grupos
+          Amigos
         </Typography.Title>
       </div>
 
       <div role="main">
-        {groups.length === 0 && (
+        {friendGroups.length === 0 && (
           <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 48 }}>
-            Todavía no tienes grupos. Crea uno para empezar.
+            Todavía no tienes amigos agregados. Invita a alguien para empezar.
           </Typography.Text>
         )}
 
-        {groups.map((group) => {
-          const balance = groupBalances[group.id] ?? 0;
-          const members = group.memberIds
-            .map((id) => profiles[id])
-            .filter((u): u is NonNullable<typeof u> => Boolean(u))
-            .map((u) => ({ emoji: u.emoji, color: u.avatarColor }));
+        {friendGroups.map((group) => {
+          const balance = balances[group.id] ?? 0;
+          const friendId = group.memberIds.find((id) => id !== currentUser?.uid);
+          const friend = friendId ? profiles[friendId] : undefined;
+          const pending = !friend;
 
           return (
             <Card
@@ -94,21 +94,26 @@ export function GroupsListScreen() {
               hoverable
               onClick={() => navigate(`/app/groups/${group.id}`)}
               role="button"
-              aria-label={group.name}
+              aria-label={friend?.name ?? 'Invitación pendiente'}
               style={{ marginBottom: 12 }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ fontSize: 32 }} aria-hidden="true">
-                  {group.emoji}
-                </div>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
+                {friend ? (
+                  <Avatar emoji={friend.emoji} color={friend.avatarColor} size={40} />
+                ) : (
+                  <div style={{ fontSize: 32 }} aria-hidden="true">
+                    🧑
+                  </div>
+                )}
+                <div style={{ flex: 1, overflow: 'hidden' }}>
                   <Typography.Text strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {group.name}
+                    {friend?.name ?? 'Invitación pendiente'}
                   </Typography.Text>
-                  <StackedAvatars members={members} />
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  {balance === 0 ? (
+                  {pending ? (
+                    <Typography.Text type="secondary">Esperando...</Typography.Text>
+                  ) : balance === 0 ? (
                     <Typography.Text type="secondary">Saldado</Typography.Text>
                   ) : (
                     <Typography.Text
@@ -133,8 +138,8 @@ export function GroupsListScreen() {
         shape="circle"
         icon={<PlusOutlined />}
         size="large"
-        aria-label="Crear grupo"
-        onClick={() => navigate('/app/groups/new')}
+        aria-label="Agregar amigo"
+        onClick={() => navigate('/app/friends/new')}
         style={{ position: 'fixed', right: 16, bottom: 72, width: 56, height: 56 }}
       />
     </div>

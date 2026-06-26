@@ -9,6 +9,7 @@ interface InvitePreview {
   name: string;
   emoji: string;
   currency: string;
+  isDirect: boolean;
 }
 
 export function JoinGroupScreen() {
@@ -74,9 +75,11 @@ export function JoinGroupScreen() {
 
         {!isLoading && preview && (
           <>
-            <div style={{ fontSize: 64, marginBottom: 16 }}>{preview.emoji}</div>
+            <div style={{ fontSize: 64, marginBottom: 16 }}>{preview.isDirect ? '🧑' : preview.emoji}</div>
             <Typography.Title level={4}>
-              Te han invitado a unirte a {preview.emoji} {preview.name}
+              {preview.isDirect
+                ? 'Te han invitado a compartir gastos contigo'
+                : `Te han invitado a unirte a ${preview.emoji} ${preview.name}`}
             </Typography.Title>
 
             {session ? (
@@ -88,7 +91,7 @@ export function JoinGroupScreen() {
                 disabled={isJoining}
                 style={{ marginTop: 8, height: 48 }}
               >
-                Unirme al grupo
+                {preview.isDirect ? 'Aceptar y empezar' : 'Unirme al grupo'}
               </Button>
             ) : (
               <>

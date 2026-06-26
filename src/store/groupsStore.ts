@@ -8,6 +8,7 @@ interface CreateGroupInput {
   emoji: string;
   currency: string;
   createdBy: string;
+  isDirect?: boolean;
 }
 
 interface GroupsState {
@@ -44,6 +45,7 @@ export const useGroupsStore = create<GroupsState>((set, get) => ({
       currency: input.currency,
       createdAt: Date.now(),
       createdBy: input.createdBy,
+      isDirect: input.isDirect ?? false,
     });
 
     set((state) => ({ groups: [newGroup, ...state.groups] }));

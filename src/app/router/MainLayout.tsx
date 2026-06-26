@@ -1,6 +1,7 @@
 import {
   HomeOutlined,
   TeamOutlined,
+  UserSwitchOutlined,
   PieChartOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -10,6 +11,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 const TABS = [
   { key: 'home', label: 'Inicio', icon: <HomeOutlined /> },
   { key: 'groups', label: 'Grupos', icon: <TeamOutlined /> },
+  { key: 'friends', label: 'Amigos', icon: <UserSwitchOutlined /> },
   { key: 'balances', label: 'Saldos', icon: <PieChartOutlined /> },
   { key: 'profile', label: 'Perfil', icon: <UserOutlined /> },
 ];

@@ -44,6 +44,8 @@ export function HomeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups]);
 
+  const realGroups = useMemo(() => groups.filter((g) => !g.isDirect), [groups]);
+
   const allExpenses = useMemo(() => Object.values(expensesByGroup).flat(), [expensesByGroup]);
 
   const { owed, owe, net } = useMemo(() => {
@@ -123,11 +125,11 @@ export function HomeScreen() {
       <Typography.Title level={2} style={{ fontSize: 16, marginBottom: 12 }}>
         Tus grupos
       </Typography.Title>
-      {groups.length === 0 ? (
+      {realGroups.length === 0 ? (
         <Typography.Text type="secondary">Todavía no tienes grupos. Crea uno para empezar.</Typography.Text>
       ) : (
         <div style={{ display: 'flex', gap: 12, overflowX: 'auto', marginBottom: 24 }}>
-          {groups.map((group) => (
+          {realGroups.map((group) => (
             <Card
               key={group.id}
               hoverable
@@ -178,14 +180,14 @@ export function HomeScreen() {
         );
       })}
 
-      {groups.length > 0 && (
+      {realGroups.length > 0 && (
         <Button
           type="primary"
           shape="circle"
           icon={<PlusOutlined />}
           size="large"
           aria-label="Agregar gasto"
-          onClick={() => navigate(`/app/groups/${groups[0].id}/add-expense`)}
+          onClick={() => navigate(`/app/groups/${realGroups[0].id}/add-expense`)}
           style={{ position: 'fixed', right: 16, bottom: 72, width: 56, height: 56 }}
         />
       )}
